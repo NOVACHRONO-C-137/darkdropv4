@@ -1,0 +1,40 @@
+import type { Metadata, Viewport } from "next";
+import { Fira_Code } from "next/font/google";
+import "./globals.css";
+import WalletProvider from "@/providers/WalletProvider";
+import { MatrixBackground } from "@/components/MatrixBackground";
+import Navbar from "@/components/Navbar";
+
+const fira = Fira_Code({
+  variable: "--font-fira",
+  weight: ["400", "500", "600", "700"],
+  subsets: ["latin"],
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  title: "DarkDrop",
+  description: "Unlinkable value transfer on Solana. Zero-knowledge proofs break every on-chain link.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="en">
+      <body className={`${fira.variable} antialiased`}>
+        <WalletProvider>
+          <div className="relative min-h-screen bg-[color:var(--background)] text-[color:var(--text)]">
+            <MatrixBackground />
+            <Navbar />
+            <main className="relative z-10 min-h-screen">{children}</main>
+          </div>
+        </WalletProvider>
+      </body>
+    </html>
+  );
+}

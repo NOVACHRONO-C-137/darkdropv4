@@ -50,7 +50,7 @@ notes/
 _study/
 
 # Legacy app/ directory (stale Node.js copy of frontend libs, not maintained)
-app/
+/app/
 
 # Claude Code settings
 .claude/
