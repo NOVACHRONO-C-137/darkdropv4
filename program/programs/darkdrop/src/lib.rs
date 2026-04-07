@@ -76,4 +76,10 @@ pub mod darkdrop {
     ) -> Result<()> {
         instructions::withdraw_credit::handle_withdraw_credit(ctx, nullifier_hash, opening, rate)
     }
+
+    /// Admin sweep: transfer SOL from treasury to authority wallet minus
+    /// rent-exempt minimum. Only callable by vault authority.
+    pub fn admin_sweep(ctx: Context<AdminSweep>) -> Result<()> {
+        instructions::admin_sweep::handle_admin_sweep(ctx)
+    }
 }

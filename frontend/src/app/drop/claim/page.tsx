@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import {
   Transaction,
@@ -30,13 +30,15 @@ import {
   getNullifierPDA,
   getCreditNotePDA,
 } from "@/lib/vault";
+import { RELAYER_URL, RELAYER_FEE_BPS, checkRelayerHealth } from "@/lib/relayer";
 
 type Stage =
   | "idle"
   | "decoding"
   | "merkle"
   | "proving"
-  | "submitting"
+  | "claiming"
+  | "withdrawing"
   | "done"
   | "error";
 
@@ -45,8 +47,6 @@ type ClaimMode = "direct" | "relayer";
 const MERKLE_DEPTH = 20;
 const CLAIM_CREDIT_DISCRIMINATOR = new Uint8Array([190, 242, 172, 79, 29, 82, 22, 163]);
 const WITHDRAW_CREDIT_DISCRIMINATOR = new Uint8Array([8, 173, 134, 129, 40, 255, 134, 30]);
-const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:3001";
-const RELAYER_FEE_BPS = 50; // 0.5%
 
 export default function ClaimPage() {
   const { publicKey, sendTransaction } = useWallet();
@@ -57,9 +57,18 @@ export default function ClaimPage() {
   const [claimMode, setClaimMode] = useState<ClaimMode>("relayer");
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState("");
-  const [txSig, setTxSig] = useState("");
+  const [claimTxSig, setClaimTxSig] = useState("");
+  const [withdrawTxSig, setWithdrawTxSig] = useState("");
   const [claimedAmount, setClaimedAmount] = useState("");
   const [feeAmount, setFeeAmount] = useState("");
+  const [relayerOnline, setRelayerOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    checkRelayerHealth().then((online) => {
+      setRelayerOnline(online);
+      setClaimMode(online ? "relayer" : "direct");
+    });
+  }, []);
 
   const handleClaim = async () => {
     if (claimMode === "direct" && (!publicKey || !sendTransaction)) {
@@ -163,8 +172,8 @@ export default function ClaimPage() {
         pwdHash
       );
 
-      // Step 4: Submit claim_credit + withdraw_credit (two TXs, presented as one action)
-      setStage("submitting");
+      // Step 3: Submit claim_credit
+      setStage("claiming");
 
       const nullifierHashBytes = bigintToBytes32BE(nullHash);
       const [nullifierPDA] = getNullifierPDA(nullifierHashBytes);
@@ -201,7 +210,8 @@ export default function ClaimPage() {
         const claimResult = await claimResp.json();
         if (!claimResp.ok) throw new Error(claimResult.error || "Relayer rejected claim");
 
-        // Step 4b: Send withdraw_credit via relayer
+        // Step 4: Send withdraw_credit via relayer
+        setStage("withdrawing");
         const withdrawResp = await fetch(`${RELAYER_URL}/api/relay/credit/withdraw`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -218,7 +228,8 @@ export default function ClaimPage() {
         const net = amount - fee;
         setClaimedAmount((Number(net) / 1e9).toFixed(4));
         setFeeAmount((Number(fee) / 1e9).toFixed(4));
-        setTxSig(withdrawResult.signature);
+        setClaimTxSig(claimResult.signature);
+        setWithdrawTxSig(withdrawResult.signature);
       } else {
         // Direct claim: two TXs from wallet
 
@@ -260,6 +271,7 @@ export default function ClaimPage() {
         await connection.confirmTransaction(sig1, "confirmed");
 
         // TX 2: withdraw_credit (SOL moves via direct lamport manipulation)
+        setStage("withdrawing");
         const openingLenBuf = new Uint8Array(4);
         new DataView(openingLenBuf.buffer).setUint32(0, 40, true);
         const rateBuf = new Uint8Array(2); // rate = 0 for direct
@@ -292,7 +304,8 @@ export default function ClaimPage() {
 
         setClaimedAmount(amountSol.toFixed(4));
         setFeeAmount("");
-        setTxSig(sig2);
+        setClaimTxSig(sig1);
+        setWithdrawTxSig(sig2);
       }
 
       setStage("done");
@@ -304,7 +317,7 @@ export default function ClaimPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-xl px-6 pb-20" style={{ paddingTop: "80px" }}>
+    <div className="mx-auto w-full max-w-xl px-4 sm:px-6 pb-20" style={{ paddingTop: "80px" }}>
       <div className="mb-8">
         <p className="mb-2 font-mono text-[9px] tracking-[0.3em] text-[rgba(0,255,65,0.35)]">
           OUTPUT // 0X02
@@ -330,7 +343,7 @@ export default function ClaimPage() {
                   onChange={(e) => setClaimCode(e.target.value)}
                   placeholder="darkdrop:v4:devnet:sol:raw:..."
                   rows={3}
-                  className="w-full text-[var(--accent)] text-xs font-mono resize-none"
+                  className="w-full text-[var(--accent)] text-[11px] sm:text-xs font-mono resize-none overflow-y-auto overflow-x-hidden break-all"
                 />
               </div>
             </div>
@@ -353,8 +366,14 @@ export default function ClaimPage() {
 
             {/* Claim method */}
             <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505]">
-              <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3">
+              <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3 flex items-center justify-between">
                 <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)]">CLAIM METHOD</span>
+                {relayerOnline !== null && (
+                  <span className={`font-mono text-[8px] tracking-[0.12em] flex items-center gap-1.5 ${relayerOnline ? "text-[rgba(0,255,65,0.5)]" : "text-[rgba(224,224,224,0.25)]"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${relayerOnline ? "bg-[var(--accent)] shadow-[0_0_4px_var(--accent)]" : "bg-[rgba(224,224,224,0.2)]"}`} />
+                    {relayerOnline ? "RELAYER: ONLINE" : "RELAYER: OFFLINE"}
+                  </span>
+                )}
               </div>
               <div className="p-4 space-y-2">
                 <button
@@ -448,16 +467,28 @@ export default function ClaimPage() {
                   Relayer fee: {feeAmount} SOL
                 </p>
               )}
-              {txSig && (
-                <a
-                  href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 block font-mono text-[10px] tracking-[0.1em] text-[rgba(0,255,65,0.5)] hover:text-[var(--accent)] transition-colors"
-                >
-                  VIEW TRANSACTION ON EXPLORER
-                </a>
-              )}
+              <div className="mt-3 space-y-1">
+                {claimTxSig && (
+                  <a
+                    href={`https://solscan.io/tx/${claimTxSig}?cluster=devnet`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block font-mono text-[10px] tracking-[0.1em] text-[rgba(0,255,65,0.5)] hover:text-[var(--accent)] transition-colors"
+                  >
+                    CLAIM TX &rarr; SOLSCAN
+                  </a>
+                )}
+                {withdrawTxSig && (
+                  <a
+                    href={`https://solscan.io/tx/${withdrawTxSig}?cluster=devnet`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block font-mono text-[10px] tracking-[0.1em] text-[rgba(0,255,65,0.5)] hover:text-[var(--accent)] transition-colors"
+                  >
+                    WITHDRAW TX &rarr; SOLSCAN
+                  </a>
+                )}
+              </div>
             </div>
 
             <button
@@ -465,7 +496,8 @@ export default function ClaimPage() {
                 setStage("idle");
                 setClaimCode("");
                 setPassword("");
-                setTxSig("");
+                setClaimTxSig("");
+                setWithdrawTxSig("");
                 setFeeAmount("");
               }}
               className="w-full border border-[rgba(0,255,65,0.2)] py-3 font-mono text-[10px] tracking-[0.15em] text-[rgba(224,224,224,0.5)] transition-all hover:border-[rgba(0,255,65,0.4)] hover:text-[var(--text)]"

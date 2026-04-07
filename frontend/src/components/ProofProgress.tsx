@@ -3,17 +3,22 @@
 import { useState, useEffect } from "react";
 
 interface ProofProgressProps {
-  stage: "idle" | "decoding" | "merkle" | "proving" | "submitting" | "done" | "error";
+  stage: "idle" | "decoding" | "merkle" | "proving" | "claiming" | "withdrawing" | "done" | "error";
   error?: string;
 }
 
 const STAGES = [
-  { key: "decoding", label: "Decoding claim code" },
-  { key: "merkle", label: "Fetching Merkle proof" },
-  { key: "proving", label: "Generating ZK proof" },
-  { key: "submitting", label: "Submitting transactions" },
-  { key: "done", label: "Claimed" },
+  { key: "decoding", label: "Decoding claim code", step: "1/4" },
+  { key: "proving", label: "Generating ZK proof", step: "2/4" },
+  { key: "claiming", label: "Submitting claim credit", step: "3/4" },
+  { key: "withdrawing", label: "Submitting withdrawal", step: "4/4" },
+  { key: "done", label: "Claimed", step: "" },
 ];
+
+// Map merkle stage to decoding for display (they're both part of step 1)
+function effectiveStage(stage: string): string {
+  return stage === "merkle" ? "decoding" : stage;
+}
 
 export default function ProofProgress({ stage, error }: ProofProgressProps) {
   const [dots, setDots] = useState("");
@@ -28,18 +33,23 @@ export default function ProofProgress({ stage, error }: ProofProgressProps) {
 
   if (stage === "idle") return null;
 
+  const mapped = effectiveStage(stage);
+
   return (
     <div className="border border-[rgba(0,255,65,0.2)] bg-[#050505] p-6 space-y-3">
       <p className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)] mb-4">PROOF PIPELINE</p>
-      {STAGES.map(({ key, label }) => {
-        const isActive = stage === key;
-        const isPast = STAGES.findIndex((s) => s.key === stage) > STAGES.findIndex((s) => s.key === key);
+      {STAGES.map(({ key, label, step }) => {
+        const isActive = mapped === key;
+        const isPast = STAGES.findIndex((s) => s.key === mapped) > STAGES.findIndex((s) => s.key === key);
         const isDone = stage === "done";
 
         return (
           <div key={key} className="flex items-center gap-3 text-sm">
             <span className={isDone || isPast ? "text-[var(--accent)]" : isActive ? "text-[var(--accent)] animate-pulse" : "text-[rgba(224,224,224,0.2)]"}>
               {isDone || isPast ? "[+]" : isActive ? "[>]" : "[ ]"}
+            </span>
+            <span className="font-mono text-[10px] text-[rgba(224,224,224,0.3)] w-6">
+              {step}
             </span>
             <span className={isDone || isPast ? "text-[var(--text)]" : isActive ? "text-[var(--accent)]" : "text-[rgba(224,224,224,0.3)]"}>
               {label}{isActive ? dots : ""}

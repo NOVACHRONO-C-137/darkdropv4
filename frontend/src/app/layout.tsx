@@ -4,6 +4,7 @@ import "./globals.css";
 import WalletProvider from "@/providers/WalletProvider";
 import { MatrixBackground } from "@/components/MatrixBackground";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 
 const fira = Fira_Code({
   variable: "--font-fira",
@@ -31,7 +32,8 @@ export default function RootLayout({
           <div className="relative min-h-screen bg-[color:var(--background)] text-[color:var(--text)]">
             <MatrixBackground />
             <Navbar />
-            <main className="relative z-10 min-h-screen">{children}</main>
+            <main className="relative z-10 min-h-screen pb-16">{children}</main>
+            <Footer />
           </div>
         </WalletProvider>
       </body>

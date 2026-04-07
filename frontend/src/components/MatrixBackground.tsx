@@ -12,20 +12,33 @@ export function MatrixBackground() {
     if (!ctx) return;
 
     let animationFrame: number;
+    const isMobile = window.innerWidth < 640;
+    const fontSize = isMobile ? 20 : 16;
+    let columns = 0;
+    let drops: number[] = [];
+
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      const newCols = Math.floor(canvas.width / fontSize);
+      if (newCols !== columns) {
+        columns = newCols;
+        drops = Array(columns).fill(0);
+      }
     };
 
     resize();
     window.addEventListener("resize", resize);
 
     const characters = "01/\\|#";
-    const fontSize = 16;
-    const columns = Math.floor(canvas.width / fontSize);
-    const drops = Array(columns).fill(0);
+    let lastTime = 0;
+    const frameInterval = isMobile ? 80 : 50;
 
-    const draw = () => {
+    const draw = (time: number) => {
+      animationFrame = requestAnimationFrame(draw);
+      if (time - lastTime < frameInterval) return;
+      lastTime = time;
+
       ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -41,11 +54,9 @@ export function MatrixBackground() {
         }
         drops[i] += 1;
       }
-
-      animationFrame = requestAnimationFrame(draw);
     };
 
-    draw();
+    animationFrame = requestAnimationFrame(draw);
 
     return () => {
       cancelAnimationFrame(animationFrame);

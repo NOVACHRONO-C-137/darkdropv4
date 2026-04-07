@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import {
   Transaction,
@@ -18,13 +18,13 @@ import {
   PROGRAM_ID,
 } from "@/lib/vault";
 import { encodeClaimCode } from "@/lib/claim-code";
+import { RELAYER_URL, checkRelayerHealth } from "@/lib/relayer";
 
 type Stage = "input" | "confirming" | "done" | "error";
 type DepositMode = "direct" | "private";
 
 // sha256("global:create_drop")[0..8]
 const CREATE_DROP_DISCRIMINATOR = new Uint8Array([157, 142, 145, 247, 92, 73, 59, 48]);
-const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:3001";
 
 export default function CreateDropPage() {
   const { publicKey, sendTransaction } = useWallet();
@@ -37,6 +37,14 @@ export default function CreateDropPage() {
   const [claimCode, setClaimCode] = useState("");
   const [error, setError] = useState("");
   const [txSig, setTxSig] = useState("");
+  const [relayerOnline, setRelayerOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    checkRelayerHealth().then((online) => {
+      setRelayerOnline(online);
+      setDepositMode(online ? "private" : "direct");
+    });
+  }, []);
 
   const handleCreateDrop = async () => {
     if (!publicKey || !sendTransaction) return;
@@ -177,7 +185,7 @@ export default function CreateDropPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-xl px-6 pb-20" style={{ paddingTop: "80px" }}>
+    <div className="mx-auto w-full max-w-xl px-4 sm:px-6 pb-20" style={{ paddingTop: "80px" }}>
       <div className="mb-8">
         <p className="mb-2 font-mono text-[9px] tracking-[0.3em] text-[rgba(0,255,65,0.35)]">
           OUTPUT // 0X01
@@ -240,8 +248,14 @@ export default function CreateDropPage() {
 
                 {/* Deposit mode */}
                 <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505]">
-                  <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3">
+                  <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3 flex items-center justify-between">
                     <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)]">DEPOSIT METHOD</span>
+                    {relayerOnline !== null && (
+                      <span className={`font-mono text-[8px] tracking-[0.12em] flex items-center gap-1.5 ${relayerOnline ? "text-[rgba(0,255,65,0.5)]" : "text-[rgba(224,224,224,0.25)]"}`}>
+                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${relayerOnline ? "bg-[var(--accent)] shadow-[0_0_4px_var(--accent)]" : "bg-[rgba(224,224,224,0.2)]"}`} />
+                        {relayerOnline ? "RELAYER: ONLINE" : "RELAYER: OFFLINE"}
+                      </span>
+                    )}
                   </div>
                   <div className="p-4 space-y-2">
                     <button
