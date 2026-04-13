@@ -187,7 +187,11 @@ export default function ClaimPage() {
       opaqueInputs.set(proofResult.passwordHash, 64);
 
       // Generate random salt for commitment re-randomization (privacy: prevents deposit→claim linkage)
-      const saltBytes = crypto.getRandomValues(new Uint8Array(32));
+      // Reduce modulo BN254 scalar field prime so Poseidon never panics with InvalidParameters
+      const BN254_FR = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+      const saltRaw = crypto.getRandomValues(new Uint8Array(32));
+      const saltReduced = bytes32BEToBigint(saltRaw) % BN254_FR;
+      const saltBytes = bigintToBytes32BE(saltReduced);
 
       // Pack opaque opening: amount(8 LE) + blinding_factor(32) + salt(32)
       const openingBuf = new Uint8Array(72);

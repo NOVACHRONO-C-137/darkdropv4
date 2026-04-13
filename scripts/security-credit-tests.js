@@ -98,7 +98,8 @@ function buildClaimCreditIx({ vault, merkleTree, creditNotePDA, nullifierPDA, re
   inputsLenBuf.writeUInt32LE(opaqueInputs.length);
 
   // salt: 32-byte random value for re-randomizing the stored commitment
-  const saltBytes = salt ? bigintToBytes32BE(salt) : crypto.randomBytes(32);
+  const BN254_FR = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+  const saltBytes = salt ? bigintToBytes32BE(salt) : bigintToBytes32BE(BigInt("0x" + crypto.randomBytes(32).toString("hex")) % BN254_FR);
 
   const data = Buffer.concat([
     getDiscriminator("claim_credit"),

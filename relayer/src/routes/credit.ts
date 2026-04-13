@@ -104,7 +104,11 @@ router.post("/claim", async (req: Request, res: Response) => {
     const inputsLenBuf = Buffer.alloc(4);
     inputsLenBuf.writeUInt32LE(inputsBuf.length);
 
-    const saltBuf = Buffer.from(body.salt);
+    // Reduce salt modulo BN254 scalar field prime so Poseidon never panics with InvalidParameters
+    const BN254_FR = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+    const saltRaw = Buffer.from(body.salt);
+    const saltBigInt = BigInt("0x" + saltRaw.toString("hex")) % BN254_FR;
+    const saltBuf = Buffer.from(saltBigInt.toString(16).padStart(64, "0"), "hex");
 
     const instructionData = Buffer.concat([
       CLAIM_CREDIT_DISC,
