@@ -36,32 +36,37 @@ export default function ProofProgress({ stage, error }: ProofProgressProps) {
   const mapped = effectiveStage(stage);
 
   return (
-    <div className="border border-[rgba(0,255,65,0.2)] bg-[#050505] p-6 space-y-3">
-      <p className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)] mb-4">PROOF PIPELINE</p>
-      {STAGES.map(({ key, label, step }) => {
-        const isActive = mapped === key;
-        const isPast = STAGES.findIndex((s) => s.key === mapped) > STAGES.findIndex((s) => s.key === key);
-        const isDone = stage === "done";
+    <div className="arcade-panel arcade-glow">
+      <div className="arcade-panel-header">
+        <span className="arcade-dot animate-pulse" />
+        <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">PROOF PIPELINE</span>
+      </div>
+      <div className="arcade-panel-body space-y-3">
+        {STAGES.map(({ key, label, step }) => {
+          const isActive = mapped === key;
+          const isPast = STAGES.findIndex((s) => s.key === mapped) > STAGES.findIndex((s) => s.key === key);
+          const isDone = stage === "done";
 
-        return (
-          <div key={key} className="flex items-center gap-3 text-sm">
-            <span className={isDone || isPast ? "text-[var(--accent)]" : isActive ? "text-[var(--accent)] animate-pulse" : "text-[rgba(224,224,224,0.2)]"}>
-              {isDone || isPast ? "[+]" : isActive ? "[>]" : "[ ]"}
-            </span>
-            <span className="font-mono text-[10px] text-[rgba(224,224,224,0.3)] w-6">
-              {step}
-            </span>
-            <span className={isDone || isPast ? "text-[var(--text)]" : isActive ? "text-[var(--accent)]" : "text-[rgba(224,224,224,0.3)]"}>
-              {label}{isActive ? dots : ""}
-            </span>
+          return (
+            <div key={key} className="flex items-center gap-3 text-sm">
+              <span className={`font-mono font-bold ${isDone || isPast ? "text-[var(--accent)]" : isActive ? "text-[var(--accent)] animate-pulse" : "text-[rgba(224,224,224,0.15)]"}`}>
+                {isDone || isPast ? "[+]" : isActive ? "[>]" : "[ ]"}
+              </span>
+              <span className="font-mono text-[10px] text-[rgba(224,224,224,0.25)] w-6">
+                {step}
+              </span>
+              <span className={`font-mono text-[11px] ${isDone || isPast ? "text-[var(--text)]" : isActive ? "text-[var(--accent)]" : "text-[rgba(224,224,224,0.25)]"}`}>
+                {label}{isActive ? dots : ""}
+              </span>
+            </div>
+          );
+        })}
+        {stage === "error" && error && (
+          <div className="mt-4 border-2 border-[rgba(255,0,68,0.3)] bg-[rgba(255,0,68,0.04)] px-5 py-3">
+            <p className="text-xs text-[var(--danger)] font-semibold">{error}</p>
           </div>
-        );
-      })}
-      {stage === "error" && error && (
-        <div className="mt-4 border border-[rgba(255,0,68,0.2)] bg-[rgba(255,0,68,0.04)] px-5 py-3">
-          <p className="text-xs text-[var(--danger)]">{error}</p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

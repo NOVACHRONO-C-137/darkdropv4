@@ -172,7 +172,7 @@ export default function ClaimPage() {
         pwdHash
       );
 
-      // Step 3: Submit claim_credit
+      // Step 4: Submit claim_credit
       setStage("claiming");
 
       const nullifierHashBytes = bigintToBytes32BE(nullHash);
@@ -200,7 +200,7 @@ export default function ClaimPage() {
       openingBuf.set(saltBytes, 40);
 
       if (claimMode === "relayer") {
-        // Step 4a: Send claim_credit via relayer
+        // Send claim_credit via relayer
         const claimResp = await fetch(`${RELAYER_URL}/api/relay/credit/claim`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -219,7 +219,7 @@ export default function ClaimPage() {
         const claimResult = await claimResp.json();
         if (!claimResp.ok) throw new Error(claimResult.error || "Relayer rejected claim");
 
-        // Step 4: Send withdraw_credit via relayer
+        // Send withdraw_credit via relayer
         setStage("withdrawing");
         const withdrawResp = await fetch(`${RELAYER_URL}/api/relay/credit/withdraw`, {
           method: "POST",
@@ -320,7 +320,7 @@ export default function ClaimPage() {
 
       setStage("done");
     } catch (err: any) {
-      console.error("Claim failed:", err);
+      console.error("Claim failed:", err.message);
       setError(err.message || "Claim failed");
       setStage("error");
     }
@@ -329,7 +329,7 @@ export default function ClaimPage() {
   return (
     <div className="mx-auto w-full max-w-xl px-4 sm:px-6 pb-20" style={{ paddingTop: "80px" }}>
       <div className="mb-8">
-        <p className="mb-2 font-mono text-[9px] tracking-[0.3em] text-[rgba(0,255,65,0.35)]">
+        <p className="mb-2 font-mono text-[9px] tracking-[0.3em] text-[var(--accent-dim)]">
           OUTPUT // 0X02
         </p>
         <h1 className="font-mono text-[clamp(24px,4vw,36px)] font-light leading-[1.15] text-[var(--text)]">
@@ -341,13 +341,14 @@ export default function ClaimPage() {
       </div>
 
         {(stage === "idle" || stage === "error") ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* Claim code */}
-            <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505]">
-              <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3">
-                <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)]">CLAIM CODE</span>
+            <div className="arcade-panel">
+              <div className="arcade-panel-header">
+                <span className="arcade-dot" />
+                <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">CLAIM CODE</span>
               </div>
-              <div className="p-4">
+              <div className="arcade-panel-body">
                 <textarea
                   value={claimCode}
                   onChange={(e) => setClaimCode(e.target.value)}
@@ -359,11 +360,12 @@ export default function ClaimPage() {
             </div>
 
             {/* Password */}
-            <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505]">
-              <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3">
-                <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)]">PASSWORD (IF REQUIRED)</span>
+            <div className="arcade-panel">
+              <div className="arcade-panel-header">
+                <span className="arcade-dot" />
+                <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">PASSWORD (IF REQUIRED)</span>
               </div>
-              <div className="p-4">
+              <div className="arcade-panel-body">
                 <input
                   type="password"
                   value={password}
@@ -375,39 +377,43 @@ export default function ClaimPage() {
             </div>
 
             {/* Claim method */}
-            <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505]">
-              <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3 flex items-center justify-between">
-                <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)]">CLAIM METHOD</span>
+            <div className="arcade-panel">
+              <div className="arcade-panel-header justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="arcade-dot" />
+                  <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">CLAIM METHOD</span>
+                </div>
                 {relayerOnline !== null && (
                   <span className={`font-mono text-[8px] tracking-[0.12em] flex items-center gap-1.5 ${relayerOnline ? "text-[rgba(0,255,65,0.5)]" : "text-[rgba(224,224,224,0.25)]"}`}>
-                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${relayerOnline ? "bg-[var(--accent)] shadow-[0_0_4px_var(--accent)]" : "bg-[rgba(224,224,224,0.2)]"}`} />
+                    <span className={relayerOnline ? "arcade-dot" : "arcade-dot arcade-dot-off"} style={{ height: 5, width: 5 }} />
                     {relayerOnline ? "RELAYER: ONLINE" : "RELAYER: OFFLINE"}
                   </span>
                 )}
               </div>
-              <div className="p-4 space-y-2">
+              <div className="arcade-panel-body space-y-2">
                 <button
                   type="button"
-                  onClick={() => setClaimMode("relayer")}
-                  className={`flex w-full items-start gap-3 border p-4 text-left transition-colors ${
+                  onClick={() => relayerOnline && setClaimMode("relayer")}
+                  disabled={!relayerOnline}
+                  className={`flex w-full items-start gap-3 border-2 p-4 text-left transition-all !shadow-none ${
                     claimMode === "relayer"
-                      ? "border-[rgba(0,255,65,0.4)] bg-[rgba(0,255,65,0.04)]"
-                      : "border-[rgba(0,255,65,0.1)] hover:border-[rgba(0,255,65,0.25)]"
-                  }`}
+                      ? "border-[var(--accent-dim)] bg-[rgba(0,255,65,0.04)]"
+                      : "border-[var(--border-dim)] hover:border-[var(--border)]"
+                  } ${!relayerOnline ? "opacity-40 !cursor-not-allowed" : ""}`}
                 >
-                  <span className={`mt-0.5 flex h-3 w-3 items-center justify-center rounded-full border ${
+                  <span className={`mt-0.5 flex h-4 w-4 items-center justify-center border-2 ${
                     claimMode === "relayer"
                       ? "border-[var(--accent)]"
                       : "border-[rgba(224,224,224,0.2)]"
                   }`}>
-                    {claimMode === "relayer" && <span className="block h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />}
+                    {claimMode === "relayer" && <span className="block h-2 w-2 bg-[var(--accent)]" />}
                   </span>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className={`font-mono text-[10px] tracking-[0.12em] ${
+                      <span className={`font-mono text-[10px] tracking-[0.12em] font-semibold ${
                         claimMode === "relayer" ? "text-[var(--accent)]" : "text-[rgba(224,224,224,0.5)]"
                       }`}>GASLESS</span>
-                      <span className="border border-[rgba(0,255,65,0.2)] px-1.5 py-0.5 font-mono text-[8px] tracking-[0.15em] text-[rgba(0,255,65,0.4)]">0.5% FEE</span>
+                      <span className="arcade-badge">0.5% FEE</span>
                     </div>
                     <p className="mt-1 text-[10px] leading-relaxed text-[rgba(224,224,224,0.3)]">
                       Relayer pays gas. Your wallet only appears as recipient, not as signer or fee payer.
@@ -417,25 +423,25 @@ export default function ClaimPage() {
                 <button
                   type="button"
                   onClick={() => setClaimMode("direct")}
-                  className={`flex w-full items-start gap-3 border p-4 text-left transition-colors ${
+                  className={`flex w-full items-start gap-3 border-2 p-4 text-left transition-all !shadow-none ${
                     claimMode === "direct"
-                      ? "border-[rgba(0,255,65,0.4)] bg-[rgba(0,255,65,0.04)]"
-                      : "border-[rgba(0,255,65,0.1)] hover:border-[rgba(0,255,65,0.25)]"
+                      ? "border-[var(--accent-dim)] bg-[rgba(0,255,65,0.04)]"
+                      : "border-[var(--border-dim)] hover:border-[var(--border)]"
                   }`}
                 >
-                  <span className={`mt-0.5 flex h-3 w-3 items-center justify-center rounded-full border ${
+                  <span className={`mt-0.5 flex h-4 w-4 items-center justify-center border-2 ${
                     claimMode === "direct"
                       ? "border-[var(--accent)]"
                       : "border-[rgba(224,224,224,0.2)]"
                   }`}>
-                    {claimMode === "direct" && <span className="block h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />}
+                    {claimMode === "direct" && <span className="block h-2 w-2 bg-[var(--accent)]" />}
                   </span>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className={`font-mono text-[10px] tracking-[0.12em] ${
+                      <span className={`font-mono text-[10px] tracking-[0.12em] font-semibold ${
                         claimMode === "direct" ? "text-[var(--accent)]" : "text-[rgba(224,224,224,0.5)]"
                       }`}>DIRECT</span>
-                      <span className="border border-[rgba(0,255,65,0.2)] px-1.5 py-0.5 font-mono text-[8px] tracking-[0.15em] text-[rgba(0,255,65,0.4)]">PAY GAS</span>
+                      <span className="arcade-badge">PAY GAS</span>
                     </div>
                     <p className="mt-1 text-[10px] leading-relaxed text-[rgba(224,224,224,0.3)]">
                       You pay gas directly. Your wallet appears as both payer and recipient.
@@ -446,58 +452,66 @@ export default function ClaimPage() {
             </div>
 
             {!publicKey && (
-              <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505] p-4 text-center text-[10px] text-[rgba(224,224,224,0.3)]">
-                Connect wallet to set your recipient address.
+              <div className="arcade-panel">
+                <div className="arcade-panel-body text-center text-[10px] text-[rgba(224,224,224,0.3)]">
+                  Connect wallet to set your recipient address.
+                </div>
               </div>
             )}
 
             {error && (
-              <div className="border border-[rgba(255,0,68,0.2)] bg-[rgba(255,0,68,0.04)] px-5 py-3">
-                <p className="text-xs text-[var(--danger)]">{error}</p>
+              <div className="border-2 border-[rgba(255,0,68,0.3)] bg-[rgba(255,0,68,0.04)] px-5 py-3 shadow-[2px_2px_0_rgba(255,0,68,0.2)]">
+                <p className="text-xs text-[var(--danger)] font-semibold">{error}</p>
               </div>
             )}
 
             <button
               onClick={handleClaim}
               disabled={!claimCode || !publicKey}
-              className="w-full border border-[var(--accent)] bg-[var(--accent)] py-3 font-mono text-[10px] font-medium tracking-[0.2em] !text-black transition-all hover:bg-[#33ff66] hover:shadow-[0_0_24px_rgba(0,255,65,0.25)] disabled:opacity-30 disabled:cursor-not-allowed"
+              className="arcade-btn-primary w-full py-3.5 font-mono text-[10px] tracking-[0.2em]"
             >
               {claimMode === "relayer" ? "CLAIM (GASLESS)" : "CLAIM (DIRECT)"}
             </button>
           </div>
         ) : stage === "done" ? (
           <div className="space-y-4">
-            <div className="border border-[rgba(0,255,65,0.2)] bg-[#050505] p-8 text-center">
-              <p className="font-mono text-[clamp(28px,4vw,40px)] font-light text-[var(--accent)] mb-2">
-                {claimedAmount} SOL
-              </p>
-              <p className="text-xs text-[rgba(224,224,224,0.5)]">Successfully claimed</p>
-              {feeAmount && (
-                <p className="mt-1 text-[10px] text-[rgba(224,224,224,0.3)]">
-                  Relayer fee: {feeAmount} SOL
+            <div className="arcade-panel arcade-glow">
+              <div className="arcade-panel-header justify-center">
+                <span className="arcade-dot" />
+                <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(0,255,65,0.6)]">CLAIMED</span>
+              </div>
+              <div className="arcade-panel-body text-center">
+                <p className="font-mono text-[clamp(28px,4vw,40px)] font-light text-[var(--accent)] mb-2">
+                  {claimedAmount} SOL
                 </p>
-              )}
-              <div className="mt-3 space-y-1">
-                {claimTxSig && (
-                  <a
-                    href={`https://solscan.io/tx/${claimTxSig}?cluster=devnet`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block font-mono text-[10px] tracking-[0.1em] text-[rgba(0,255,65,0.5)] hover:text-[var(--accent)] transition-colors"
-                  >
-                    CLAIM TX &rarr; SOLSCAN
-                  </a>
+                <p className="text-xs text-[rgba(224,224,224,0.5)]">Successfully claimed</p>
+                {feeAmount && (
+                  <p className="mt-1 text-[10px] text-[rgba(224,224,224,0.3)]">
+                    Relayer fee: {feeAmount} SOL
+                  </p>
                 )}
-                {withdrawTxSig && (
-                  <a
-                    href={`https://solscan.io/tx/${withdrawTxSig}?cluster=devnet`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block font-mono text-[10px] tracking-[0.1em] text-[rgba(0,255,65,0.5)] hover:text-[var(--accent)] transition-colors"
-                  >
-                    WITHDRAW TX &rarr; SOLSCAN
-                  </a>
-                )}
+                <div className="mt-4 space-y-1">
+                  {claimTxSig && (
+                    <a
+                      href={`https://solscan.io/tx/${claimTxSig}?cluster=devnet`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block font-mono text-[10px] tracking-[0.1em] text-[rgba(0,255,65,0.5)] hover:text-[var(--accent)] transition-colors"
+                    >
+                      CLAIM TX &rarr; SOLSCAN
+                    </a>
+                  )}
+                  {withdrawTxSig && (
+                    <a
+                      href={`https://solscan.io/tx/${withdrawTxSig}?cluster=devnet`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block font-mono text-[10px] tracking-[0.1em] text-[rgba(0,255,65,0.5)] hover:text-[var(--accent)] transition-colors"
+                    >
+                      WITHDRAW TX &rarr; SOLSCAN
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -510,7 +524,7 @@ export default function ClaimPage() {
                 setWithdrawTxSig("");
                 setFeeAmount("");
               }}
-              className="w-full border border-[rgba(0,255,65,0.2)] py-3 font-mono text-[10px] tracking-[0.15em] text-[rgba(224,224,224,0.5)] transition-all hover:border-[rgba(0,255,65,0.4)] hover:text-[var(--text)]"
+              className="arcade-btn-ghost w-full py-3 font-mono text-[10px] tracking-[0.15em]"
             >
               CLAIM ANOTHER
             </button>

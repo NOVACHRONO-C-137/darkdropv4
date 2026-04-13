@@ -6,46 +6,42 @@ import dynamic from "next/dynamic";
 
 const WalletMultiButton = dynamic(
   () => import("@solana/wallet-adapter-react-ui").then((mod) => mod.WalletMultiButton),
-  { ssr: false }
+  { ssr: false, loading: () => <span className="font-mono text-[9px] text-[var(--accent-dim)]">...</span> }
 );
 
 export default function Navbar() {
   const path = usePathname();
 
   const linkClass = (href: string) =>
-    `px-3 sm:px-4 py-1.5 font-mono text-[10px] tracking-[0.15em] transition-colors ${
+    `px-2.5 sm:px-4 py-1.5 font-mono text-[8px] sm:text-[10px] tracking-[0.1em] sm:tracking-[0.15em] transition-all whitespace-nowrap ${
       path === href
-        ? "text-[var(--accent)]"
-        : "text-[rgba(224,224,224,0.5)] hover:text-[var(--accent)]"
+        ? "text-[var(--accent)] bg-[rgba(0,255,65,0.08)]"
+        : "text-[rgba(224,224,224,0.5)] hover:text-[var(--accent)] hover:bg-[rgba(0,255,65,0.04)]"
     }`;
 
   return (
     <nav
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-[rgba(0,255,65,0.12)] bg-[rgba(0,0,0,0.92)] px-4 sm:px-8 backdrop-blur-md"
+      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-2 sm:gap-4 border-b-2 border-[var(--border)] bg-[rgba(0,0,0,0.95)] px-3 sm:px-8"
       style={{ height: "52px" }}
     >
-      <Link href="/" className="font-mono text-[11px] sm:text-[13px] tracking-[0.22em] text-[var(--accent)] shrink-0">
+      {/* Logo — left */}
+      <Link href="/" className="font-mono text-[10px] sm:text-[13px] tracking-[0.18em] sm:tracking-[0.22em] text-[var(--accent)] shrink-0 font-bold">
         DARKDROP
       </Link>
-      <div className="flex items-center gap-1 border border-[rgba(0,255,65,0.15)] px-1 py-1">
+
+      {/* Nav links — center */}
+      <div className="flex items-center gap-0 border-2 border-[var(--border)] bg-[rgba(0,0,0,0.5)] shrink-0">
         <Link href="/drop/create" className={linkClass("/drop/create")}>CREATE</Link>
+        <div className="w-px h-5 bg-[var(--border-dim)]" />
         <Link href="/drop/claim" className={linkClass("/drop/claim")}>CLAIM</Link>
+        <div className="w-px h-5 bg-[var(--border-dim)]" />
+        <Link href="/docs" className={linkClass("/docs")}>DOCS</Link>
       </div>
-      <WalletMultiButton
-        style={{
-          backgroundColor: "rgba(0, 255, 65, 0.08)",
-          border: "1px solid rgba(0, 255, 65, 0.5)",
-          color: "var(--accent)",
-          fontFamily: "var(--font-fira), monospace",
-          fontSize: "0.6rem",
-          height: "34px",
-          letterSpacing: "0.2em",
-          textTransform: "uppercase" as const,
-          padding: "0 10px",
-          maxWidth: "140px",
-          overflow: "hidden",
-        }}
-      />
+
+      {/* Wallet — right */}
+      <div className="shrink-0">
+        <WalletMultiButton />
+      </div>
     </nav>
   );
 }

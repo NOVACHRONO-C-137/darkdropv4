@@ -7,13 +7,13 @@ export const metadata: Metadata = {
 
 function Section({ id, label, title, children }: { id: string; label: string; title: string; children: React.ReactNode }) {
   return (
-    <section id={id} className="border border-[rgba(0,255,65,0.1)] bg-[#050505]">
-      <div className="border-b border-[rgba(0,255,65,0.1)] px-5 sm:px-6 py-3 flex items-center gap-3">
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_6px_var(--accent)]" />
+    <section id={id} className="arcade-panel">
+      <div className="arcade-panel-header">
+        <span className="arcade-dot" />
         <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(0,255,65,0.6)]">{label}</span>
       </div>
-      <div className="px-5 sm:px-6 py-5 sm:py-6 space-y-4">
-        <h2 className="font-mono text-[clamp(16px,3vw,22px)] font-medium tracking-[0.06em] text-[var(--text)]">{title}</h2>
+      <div className="arcade-panel-body space-y-4">
+        <h2 className="font-mono text-[clamp(16px,3vw,22px)] font-semibold tracking-[0.06em] text-[var(--text)]">{title}</h2>
         {children}
       </div>
     </section>
@@ -25,15 +25,15 @@ function P({ children }: { children: React.ReactNode }) {
 }
 
 function Accent({ children }: { children: React.ReactNode }) {
-  return <span className="text-[var(--accent)]">{children}</span>;
+  return <span className="text-[var(--accent)] font-semibold">{children}</span>;
 }
 
 function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-4">
-      <span className="shrink-0 font-mono text-[10px] tracking-[0.15em] text-[var(--accent)]">{n}</span>
+      <span className="shrink-0 font-mono text-[10px] tracking-[0.15em] text-[var(--accent)] font-bold">{n}</span>
       <div>
-        <p className="font-mono text-xs tracking-[0.06em] text-[var(--text)] mb-1">{title}</p>
+        <p className="font-mono text-xs tracking-[0.06em] text-[var(--text)] mb-1 font-semibold">{title}</p>
         <p className="text-xs leading-relaxed text-[rgba(224,224,224,0.45)]">{children}</p>
       </div>
     </div>
@@ -42,8 +42,8 @@ function Step({ n, title, children }: { n: string; title: string; children: Reac
 
 function FAQ({ q, children }: { q: string; children: React.ReactNode }) {
   return (
-    <div className="border-l-2 border-[rgba(0,255,65,0.2)] pl-4">
-      <p className="font-mono text-xs tracking-[0.04em] text-[var(--text)] mb-1">{q}</p>
+    <div className="border-l-2 border-[var(--accent-dim)] pl-4">
+      <p className="font-mono text-xs tracking-[0.04em] text-[var(--text)] mb-1 font-semibold">{q}</p>
       <p className="text-xs leading-relaxed text-[rgba(224,224,224,0.45)]">{children}</p>
     </div>
   );
@@ -53,7 +53,7 @@ export default function DocsPage() {
   return (
     <div className="mx-auto w-full max-w-2xl px-4 sm:px-6 pb-20" style={{ paddingTop: "80px" }}>
       <div className="mb-8">
-        <p className="mb-2 font-mono text-[9px] tracking-[0.3em] text-[rgba(0,255,65,0.35)]">
+        <p className="mb-2 font-mono text-[9px] tracking-[0.3em] text-[var(--accent-dim)]">
           OUTPUT // 0X03 &mdash; DOCUMENTATION
         </p>
         <h1 className="font-mono text-[clamp(24px,4vw,36px)] font-light leading-[1.15] text-[var(--text)]">
@@ -63,24 +63,29 @@ export default function DocsPage() {
       </div>
 
       {/* Table of contents */}
-      <nav className="mb-8 border border-[rgba(0,255,65,0.1)] bg-[#050505] px-5 sm:px-6 py-4 space-y-1">
-        <p className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)] mb-3">CONTENTS</p>
-        {[
-          ["what", "What is DarkDrop"],
-          ["how", "How it works"],
-          ["credit-note", "The Credit Note Model"],
-          ["usage", "How to use it"],
-          ["privacy", "Privacy model"],
-          ["faq", "FAQ"],
-        ].map(([id, label]) => (
-          <a
-            key={id}
-            href={`#${id}`}
-            className="block font-mono text-[10px] tracking-[0.08em] text-[rgba(224,224,224,0.4)] hover:text-[var(--accent)] transition-colors"
-          >
-            &gt; {label}
-          </a>
-        ))}
+      <nav className="mb-8 arcade-panel">
+        <div className="arcade-panel-header">
+          <span className="arcade-dot" />
+          <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">CONTENTS</span>
+        </div>
+        <div className="arcade-panel-body space-y-1">
+          {[
+            ["what", "What is DarkDrop"],
+            ["how", "How it works"],
+            ["credit-note", "The Credit Note Model"],
+            ["usage", "How to use it"],
+            ["privacy", "Privacy model"],
+            ["faq", "FAQ"],
+          ].map(([id, label]) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              className="block font-mono text-[10px] tracking-[0.08em] text-[rgba(224,224,224,0.4)] hover:text-[var(--accent)] transition-colors"
+            >
+              &gt; {label}
+            </a>
+          ))}
+        </div>
       </nav>
 
       <div className="space-y-4">
@@ -179,43 +184,43 @@ export default function DocsPage() {
         <Section id="privacy" label="0X05" title="Privacy model">
           <P>DarkDrop is honest about what is hidden and what is not.</P>
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-xs border-2 border-[var(--border-dim)]">
               <thead>
-                <tr className="border-b border-[rgba(0,255,65,0.15)]">
-                  <th className="py-2 pr-4 text-left font-mono text-[9px] tracking-[0.15em] text-[rgba(224,224,224,0.3)]">DATA POINT</th>
-                  <th className="py-2 pr-4 text-left font-mono text-[9px] tracking-[0.15em] text-[rgba(224,224,224,0.3)]">DEPOSIT</th>
-                  <th className="py-2 pr-4 text-left font-mono text-[9px] tracking-[0.15em] text-[rgba(224,224,224,0.3)]">CLAIM</th>
-                  <th className="py-2 text-left font-mono text-[9px] tracking-[0.15em] text-[rgba(224,224,224,0.3)]">WITHDRAW</th>
+                <tr className="border-b-2 border-[var(--border-dim)] bg-[rgba(0,255,65,0.02)]">
+                  <th className="py-2.5 px-3 text-left font-mono text-[9px] tracking-[0.15em] text-[rgba(224,224,224,0.3)] font-semibold">DATA POINT</th>
+                  <th className="py-2.5 px-3 text-left font-mono text-[9px] tracking-[0.15em] text-[rgba(224,224,224,0.3)] font-semibold">DEPOSIT</th>
+                  <th className="py-2.5 px-3 text-left font-mono text-[9px] tracking-[0.15em] text-[rgba(224,224,224,0.3)] font-semibold">CLAIM</th>
+                  <th className="py-2.5 px-3 text-left font-mono text-[9px] tracking-[0.15em] text-[rgba(224,224,224,0.3)] font-semibold">WITHDRAW</th>
                 </tr>
               </thead>
               <tbody className="text-[rgba(224,224,224,0.5)]">
-                <tr className="border-b border-[rgba(0,255,65,0.06)]">
-                  <td className="py-2 pr-4">Sender wallet</td>
-                  <td className="py-2 pr-4">Visible</td>
-                  <td className="py-2 pr-4">Not present</td>
-                  <td className="py-2">Not present</td>
+                <tr className="border-b border-[var(--border-dim)]">
+                  <td className="py-2 px-3">Sender wallet</td>
+                  <td className="py-2 px-3">Visible</td>
+                  <td className="py-2 px-3">Not present</td>
+                  <td className="py-2 px-3">Not present</td>
                 </tr>
-                <tr className="border-b border-[rgba(0,255,65,0.06)]">
-                  <td className="py-2 pr-4">Receiver wallet</td>
-                  <td className="py-2 pr-4">Not present</td>
-                  <td className="py-2 pr-4">Present</td>
-                  <td className="py-2">Present</td>
+                <tr className="border-b border-[var(--border-dim)]">
+                  <td className="py-2 px-3">Receiver wallet</td>
+                  <td className="py-2 px-3">Not present</td>
+                  <td className="py-2 px-3">Present</td>
+                  <td className="py-2 px-3">Present</td>
                 </tr>
-                <tr className="border-b border-[rgba(0,255,65,0.06)]">
-                  <td className="py-2 pr-4">Amount</td>
-                  <td className="py-2 pr-4">Visible (CPI)</td>
-                  <td className="py-2 pr-4 text-[var(--accent)]">Hidden</td>
-                  <td className="py-2">Balance delta only</td>
+                <tr className="border-b border-[var(--border-dim)]">
+                  <td className="py-2 px-3">Amount</td>
+                  <td className="py-2 px-3">Visible (CPI)</td>
+                  <td className="py-2 px-3 text-[var(--accent)] font-semibold">Hidden</td>
+                  <td className="py-2 px-3">Balance delta only</td>
                 </tr>
-                <tr className="border-b border-[rgba(0,255,65,0.06)]">
-                  <td className="py-2 pr-4">Deposit &rarr; Claim link</td>
-                  <td className="py-2 pr-4 text-[var(--accent)]" colSpan={3}>Impossible (Merkle proof hides which leaf)</td>
+                <tr className="border-b border-[var(--border-dim)]">
+                  <td className="py-2 px-3">Deposit &rarr; Claim link</td>
+                  <td className="py-2 px-3 text-[var(--accent)] font-semibold" colSpan={3}>Impossible (Merkle proof hides which leaf)</td>
                 </tr>
-                <tr className="border-b border-[rgba(0,255,65,0.06)]">
-                  <td className="py-2 pr-4">Inner instructions</td>
-                  <td className="py-2 pr-4">Transfer</td>
-                  <td className="py-2 pr-4">CreateAccount (PDAs)</td>
-                  <td className="py-2 text-[var(--accent)]">None</td>
+                <tr>
+                  <td className="py-2 px-3">Inner instructions</td>
+                  <td className="py-2 px-3">Transfer</td>
+                  <td className="py-2 px-3">CreateAccount (PDAs)</td>
+                  <td className="py-2 px-3 text-[var(--accent)] font-semibold">None</td>
                 </tr>
               </tbody>
             </table>

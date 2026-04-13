@@ -26,6 +26,8 @@ type DepositMode = "direct" | "private";
 // sha256("global:create_drop")[0..8]
 const CREATE_DROP_DISCRIMINATOR = new Uint8Array([157, 142, 145, 247, 92, 73, 59, 48]);
 
+const MIN_SOL = 0.00001; // 10,000 lamports
+
 export default function CreateDropPage() {
   const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
@@ -52,6 +54,10 @@ export default function CreateDropPage() {
     const solAmount = parseFloat(amount);
     if (isNaN(solAmount) || solAmount <= 0) {
       setError("Enter a valid SOL amount");
+      return;
+    }
+    if (solAmount < MIN_SOL) {
+      setError(`Minimum deposit: ${MIN_SOL} SOL`);
       return;
     }
     if (solAmount > 100) {
@@ -178,7 +184,7 @@ export default function CreateDropPage() {
       setTxSig(sig);
       setStage("done");
     } catch (err: any) {
-      console.error("Create drop failed:", err);
+      console.error("Create drop failed:", err.message);
       setError(err.message || "Transaction failed");
       setStage("error");
     }
@@ -187,7 +193,7 @@ export default function CreateDropPage() {
   return (
     <div className="mx-auto w-full max-w-xl px-4 sm:px-6 pb-20" style={{ paddingTop: "80px" }}>
       <div className="mb-8">
-        <p className="mb-2 font-mono text-[9px] tracking-[0.3em] text-[rgba(0,255,65,0.35)]">
+        <p className="mb-2 font-mono text-[9px] tracking-[0.3em] text-[var(--accent-dim)]">
           OUTPUT // 0X01
         </p>
         <h1 className="font-mono text-[clamp(24px,4vw,36px)] font-light leading-[1.15] text-[var(--text)]">
@@ -199,25 +205,28 @@ export default function CreateDropPage() {
       </div>
 
         {(stage === "input" || stage === "error") ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {!publicKey && (
-              <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505] p-6 text-center text-sm text-[rgba(224,224,224,0.4)]">
-                Connect your wallet to create a drop.
+              <div className="arcade-panel">
+                <div className="arcade-panel-body text-center text-sm text-[rgba(224,224,224,0.4)]">
+                  Connect your wallet to create a drop.
+                </div>
               </div>
             )}
 
             {publicKey && (
               <>
                 {/* Amount field */}
-                <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505]">
-                  <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3">
-                    <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)]">AMOUNT (SOL)</span>
+                <div className="arcade-panel">
+                  <div className="arcade-panel-header">
+                    <span className="arcade-dot" />
+                    <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">AMOUNT (SOL)</span>
                   </div>
-                  <div className="p-4">
+                  <div className="arcade-panel-body">
                     <input
                       type="number"
                       step="0.001"
-                      min="0"
+                      min={MIN_SOL}
                       max="100"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
@@ -228,11 +237,12 @@ export default function CreateDropPage() {
                 </div>
 
                 {/* Password field */}
-                <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505]">
-                  <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3">
-                    <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)]">PASSWORD (OPTIONAL)</span>
+                <div className="arcade-panel">
+                  <div className="arcade-panel-header">
+                    <span className="arcade-dot" />
+                    <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">PASSWORD (OPTIONAL)</span>
                   </div>
-                  <div className="p-4">
+                  <div className="arcade-panel-body">
                     <input
                       type="password"
                       value={password}
@@ -247,36 +257,39 @@ export default function CreateDropPage() {
                 </div>
 
                 {/* Deposit mode */}
-                <div className="border border-[rgba(0,255,65,0.1)] bg-[#050505]">
-                  <div className="border-b border-[rgba(0,255,65,0.1)] px-5 py-3 flex items-center justify-between">
-                    <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.2)]">DEPOSIT METHOD</span>
+                <div className="arcade-panel">
+                  <div className="arcade-panel-header justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="arcade-dot" />
+                      <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">DEPOSIT METHOD</span>
+                    </div>
                     {relayerOnline !== null && (
                       <span className={`font-mono text-[8px] tracking-[0.12em] flex items-center gap-1.5 ${relayerOnline ? "text-[rgba(0,255,65,0.5)]" : "text-[rgba(224,224,224,0.25)]"}`}>
-                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${relayerOnline ? "bg-[var(--accent)] shadow-[0_0_4px_var(--accent)]" : "bg-[rgba(224,224,224,0.2)]"}`} />
+                        <span className={relayerOnline ? "arcade-dot" : "arcade-dot arcade-dot-off"} style={{ height: 5, width: 5 }} />
                         {relayerOnline ? "RELAYER: ONLINE" : "RELAYER: OFFLINE"}
                       </span>
                     )}
                   </div>
-                  <div className="p-4 space-y-2">
+                  <div className="arcade-panel-body space-y-2">
                     <button
                       type="button"
                       onClick={() => setDepositMode("direct")}
-                      className={`flex w-full items-start gap-3 border p-4 text-left transition-colors ${
+                      className={`flex w-full items-start gap-3 border-2 p-4 text-left transition-all !shadow-none ${
                         depositMode === "direct"
-                          ? "border-[rgba(0,255,65,0.4)] bg-[rgba(0,255,65,0.04)]"
-                          : "border-[rgba(0,255,65,0.1)] hover:border-[rgba(0,255,65,0.25)]"
+                          ? "border-[var(--accent-dim)] bg-[rgba(0,255,65,0.04)]"
+                          : "border-[var(--border-dim)] hover:border-[var(--border)]"
                       }`}
                     >
-                      <span className={`mt-0.5 flex h-3 w-3 items-center justify-center rounded-full border ${
+                      <span className={`mt-0.5 flex h-4 w-4 items-center justify-center border-2 ${
                         depositMode === "direct"
                           ? "border-[var(--accent)]"
                           : "border-[rgba(224,224,224,0.2)]"
                       }`}>
-                        {depositMode === "direct" && <span className="block h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />}
+                        {depositMode === "direct" && <span className="block h-2 w-2 bg-[var(--accent)]" />}
                       </span>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className={`font-mono text-[10px] tracking-[0.12em] ${
+                          <span className={`font-mono text-[10px] tracking-[0.12em] font-semibold ${
                             depositMode === "direct" ? "text-[var(--accent)]" : "text-[rgba(224,224,224,0.5)]"
                           }`}>DIRECT</span>
                         </div>
@@ -287,26 +300,27 @@ export default function CreateDropPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setDepositMode("private")}
-                      className={`flex w-full items-start gap-3 border p-4 text-left transition-colors ${
+                      onClick={() => relayerOnline && setDepositMode("private")}
+                      disabled={!relayerOnline}
+                      className={`flex w-full items-start gap-3 border-2 p-4 text-left transition-all !shadow-none ${
                         depositMode === "private"
-                          ? "border-[rgba(0,255,65,0.4)] bg-[rgba(0,255,65,0.04)]"
-                          : "border-[rgba(0,255,65,0.1)] hover:border-[rgba(0,255,65,0.25)]"
-                      }`}
+                          ? "border-[var(--accent-dim)] bg-[rgba(0,255,65,0.04)]"
+                          : "border-[var(--border-dim)] hover:border-[var(--border)]"
+                      } ${!relayerOnline ? "opacity-40 !cursor-not-allowed" : ""}`}
                     >
-                      <span className={`mt-0.5 flex h-3 w-3 items-center justify-center rounded-full border ${
+                      <span className={`mt-0.5 flex h-4 w-4 items-center justify-center border-2 ${
                         depositMode === "private"
                           ? "border-[var(--accent)]"
                           : "border-[rgba(224,224,224,0.2)]"
                       }`}>
-                        {depositMode === "private" && <span className="block h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />}
+                        {depositMode === "private" && <span className="block h-2 w-2 bg-[var(--accent)]" />}
                       </span>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className={`font-mono text-[10px] tracking-[0.12em] ${
+                          <span className={`font-mono text-[10px] tracking-[0.12em] font-semibold ${
                             depositMode === "private" ? "text-[var(--accent)]" : "text-[rgba(224,224,224,0.5)]"
                           }`}>PRIVATE DEPOSIT</span>
-                          <span className="border border-[rgba(0,255,65,0.2)] px-1.5 py-0.5 font-mono text-[8px] tracking-[0.15em] text-[rgba(0,255,65,0.4)]">RELAYER</span>
+                          <span className="arcade-badge">RELAYER</span>
                         </div>
                         <p className="mt-1 text-[10px] leading-relaxed text-[rgba(224,224,224,0.3)]">
                           SOL routes through the relayer. Your wallet never appears in the DarkDrop TX.
@@ -317,15 +331,15 @@ export default function CreateDropPage() {
                 </div>
 
                 {error && (
-                  <div className="border border-[rgba(255,0,68,0.2)] bg-[rgba(255,0,68,0.04)] px-5 py-3">
-                    <p className="text-xs text-[var(--danger)]">{error}</p>
+                  <div className="border-2 border-[rgba(255,0,68,0.3)] bg-[rgba(255,0,68,0.04)] px-5 py-3 shadow-[2px_2px_0_rgba(255,0,68,0.2)]">
+                    <p className="text-xs text-[var(--danger)] font-semibold">{error}</p>
                   </div>
                 )}
 
                 <button
                   onClick={handleCreateDrop}
                   disabled={!amount}
-                  className="w-full border border-[var(--accent)] bg-[var(--accent)] py-3 font-mono text-[10px] font-medium tracking-[0.2em] !text-black transition-all hover:bg-[#33ff66] hover:shadow-[0_0_24px_rgba(0,255,65,0.25)] disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="arcade-btn-primary w-full py-3.5 font-mono text-[10px] tracking-[0.2em]"
                 >
                   {depositMode === "private" ? "PRIVATE DEPOSIT" : "CREATE DROP"}
                 </button>
@@ -333,19 +347,26 @@ export default function CreateDropPage() {
             )}
           </div>
         ) : stage === "confirming" ? (
-          <div className="border border-[rgba(0,255,65,0.2)] bg-[#050505] p-8 text-center">
-            <div className="text-[var(--accent)] animate-pulse text-sm mb-2">
-              Confirming transaction...
-            </div>
-            <div className="text-[10px] text-[rgba(224,224,224,0.3)]">
-              Approve the transaction in your wallet.
+          <div className="arcade-panel arcade-glow">
+            <div className="arcade-panel-body p-8 text-center">
+              <div className="text-[var(--accent)] animate-pulse text-sm mb-2 font-semibold">
+                Confirming transaction...
+              </div>
+              <div className="text-[10px] text-[rgba(224,224,224,0.3)]">
+                Approve the transaction in your wallet.
+              </div>
             </div>
           </div>
         ) : stage === "done" ? (
           <div className="space-y-4">
-            <div className="border border-[rgba(0,255,65,0.2)] bg-[#050505] p-6 text-center">
-              <p className="font-mono text-[9px] tracking-[0.28em] text-[rgba(0,255,65,0.6)] mb-1">DROP CREATED</p>
-              <p className="text-xs text-[rgba(224,224,224,0.5)]">{amount} SOL deposited to vault</p>
+            <div className="arcade-panel arcade-glow">
+              <div className="arcade-panel-header justify-center">
+                <span className="arcade-dot" />
+                <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(0,255,65,0.6)]">DROP CREATED</span>
+              </div>
+              <div className="arcade-panel-body text-center">
+                <p className="text-sm text-[rgba(224,224,224,0.5)]">{amount} SOL deposited to vault</p>
+              </div>
             </div>
 
             <CodeDisplay code={claimCode} />
@@ -353,17 +374,17 @@ export default function CreateDropPage() {
             {txSig && (
               <div className="text-center">
                 <a
-                  href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`}
+                  href={`https://solscan.io/tx/${txSig}?cluster=devnet`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-[10px] tracking-[0.1em] text-[rgba(0,255,65,0.5)] hover:text-[var(--accent)] transition-colors"
                 >
-                  VIEW TRANSACTION ON EXPLORER
+                  VIEW TRANSACTION ON SOLSCAN
                 </a>
               </div>
             )}
 
-            <div className="border border-[rgba(255,0,68,0.15)] bg-[rgba(255,0,68,0.02)] px-5 py-3">
+            <div className="border-2 border-[rgba(255,0,68,0.2)] bg-[rgba(255,0,68,0.02)] px-5 py-3">
               <p className="text-[10px] leading-relaxed text-[rgba(224,224,224,0.4)]">
                 Share this code with the recipient. Anyone with the code can claim the funds{password ? " (password required)" : ""}. Store it securely.
               </p>
@@ -376,7 +397,7 @@ export default function CreateDropPage() {
                 setPassword("");
                 setClaimCode("");
               }}
-              className="w-full border border-[rgba(0,255,65,0.2)] py-3 font-mono text-[10px] tracking-[0.15em] text-[rgba(224,224,224,0.5)] transition-all hover:border-[rgba(0,255,65,0.4)] hover:text-[var(--text)]"
+              className="arcade-btn-ghost w-full py-3 font-mono text-[10px] tracking-[0.15em]"
             >
               CREATE ANOTHER
             </button>
