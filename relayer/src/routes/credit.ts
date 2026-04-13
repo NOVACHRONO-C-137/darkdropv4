@@ -22,6 +22,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { config } from "../config";
+import { verifyClaimProofV2, pubkeyToField, bytes32ToBigInt } from "../verify";
 
 const router = Router();
 
@@ -75,6 +76,25 @@ router.post("/claim", async (req: Request, res: Response) => {
     if (body.inputs.length !== 96) return res.status(400).json({ error: "inputs must be 96 bytes" });
     if (body.salt.length !== 32) return res.status(400).json({ error: "salt must be 32 bytes" });
 
+    // Pre-validate ZK proof off-chain before spending gas
+    // inputs = merkle_root(32) + amount_commitment(32) + password_hash(32)
+    const inputsBuf = Buffer.from(body.inputs);
+    const merkleRootBigint = bytes32ToBigInt(inputsBuf, 0);
+    const amountCommitBigint = bytes32ToBigInt(inputsBuf, 32);
+    const passwordHashBigint = bytes32ToBigInt(inputsBuf, 64);
+    const nullifierHashBigint = bytes32ToBigInt(Buffer.from(body.nullifierHash));
+    const recipientPubkey = new PublicKey(body.recipient);
+    const recipientField = await pubkeyToField(recipientPubkey.toBytes());
+
+    // V2 public inputs order: [merkle_root, nullifier_hash, recipient_hash, amount_commitment, password_hash]
+    const valid = await verifyClaimProofV2(
+      body.proof.proofA, body.proof.proofB, body.proof.proofC,
+      [merkleRootBigint, nullifierHashBigint, recipientField, amountCommitBigint, passwordHashBigint],
+    );
+    if (!valid) {
+      return res.status(400).json({ error: "Invalid ZK proof" });
+    }
+
     const relayer: Keypair = req.app.locals.relayerKeypair;
     const connection = new Connection(config.rpcUrl, "confirmed");
 
@@ -83,7 +103,7 @@ router.post("/claim", async (req: Request, res: Response) => {
     const merkleTree = getMerkleTreePDA(vault);
     const creditNotePDA = getCreditNotePDA(nullifierHashBytes);
     const nullifierPDA = getNullifierPDA(nullifierHashBytes);
-    const recipient = new PublicKey(body.recipient);
+    const recipient = recipientPubkey;
 
     // Check nullifier not spent
     const existingNullifier = await connection.getAccountInfo(nullifierPDA);
@@ -91,8 +111,7 @@ router.post("/claim", async (req: Request, res: Response) => {
       return res.status(409).json({ error: "Nullifier already spent" });
     }
 
-    // Borsh-encode Vec<u8> inputs
-    const inputsBuf = Buffer.from(body.inputs);
+    // Borsh-encode Vec<u8> inputs (inputsBuf already created above for proof validation)
     const inputsLenBuf = Buffer.alloc(4);
     inputsLenBuf.writeUInt32LE(inputsBuf.length);
 

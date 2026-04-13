@@ -277,16 +277,6 @@ export default function ClaimPage() {
           ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
           claimCreditIx
         );
-        tx1.feePayer = publicKey!;
-        tx1.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-
-        // Simulate TX1 before sending to get program logs on failure
-        const sim1 = await connection.simulateTransaction(tx1);
-        console.log("[DEBUG] claim_credit simulation:", JSON.stringify(sim1.value, null, 2));
-        if (sim1.value.err) {
-          throw new Error(`claim_credit simulation failed: ${JSON.stringify(sim1.value.err)}\nLogs: ${sim1.value.logs?.join("\n")}`);
-        }
-
         const sig1 = await sendTransaction!(tx1, connection);
         await connection.confirmTransaction(sig1, "confirmed");
 
@@ -319,16 +309,6 @@ export default function ClaimPage() {
         });
 
         const tx2 = new Transaction().add(withdrawIx);
-        tx2.feePayer = publicKey!;
-        tx2.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-
-        // Simulate TX2 before sending to get program logs on failure
-        const sim2 = await connection.simulateTransaction(tx2);
-        console.log("[DEBUG] withdraw_credit simulation:", JSON.stringify(sim2.value, null, 2));
-        if (sim2.value.err) {
-          throw new Error(`withdraw_credit simulation failed: ${JSON.stringify(sim2.value.err)}\nLogs: ${sim2.value.logs?.join("\n")}`);
-        }
-
         const sig2 = await sendTransaction!(tx2, connection);
         await connection.confirmTransaction(sig2, "confirmed");
 

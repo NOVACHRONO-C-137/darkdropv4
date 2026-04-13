@@ -22,6 +22,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { config } from "../config";
+import { verifyClaimProofV1, pubkeyToField, bytes32ToBigInt } from "../verify";
 
 const router = Router();
 
@@ -94,6 +95,24 @@ router.post("/", async (req: Request, res: Response) => {
     const amount = BigInt(body.amount);
     if (amount <= 0n) return res.status(400).json({ error: "Amount must be > 0" });
     if (amount > config.maxClaimAmount) return res.status(400).json({ error: "Amount exceeds relay limit" });
+
+    // Pre-validate ZK proof off-chain before spending gas
+    const recipientPubkey = new PublicKey(body.recipient);
+    const recipientField = await pubkeyToField(recipientPubkey.toBytes());
+    const merkleRootBigint = bytes32ToBigInt(Buffer.from(body.merkleRoot));
+    const nullifierHashBigint = bytes32ToBigInt(Buffer.from(body.nullifierHash));
+    const amountCommitBigint = bytes32ToBigInt(Buffer.from(body.amountCommitment));
+    const passwordHashBigint = bytes32ToBigInt(Buffer.from(body.passwordHash));
+
+    // V1 public inputs order: [amount, merkle_root, nullifier_hash, recipient_hash, amount_commitment, password_hash]
+    const amountField = amount; // amount as lamports, zero-padded to field
+    const valid = await verifyClaimProofV1(
+      body.proof.proofA, body.proof.proofB, body.proof.proofC,
+      [amountField, merkleRootBigint, nullifierHashBigint, recipientField, amountCommitBigint, passwordHashBigint],
+    );
+    if (!valid) {
+      return res.status(400).json({ error: "Invalid ZK proof" });
+    }
 
     // Compute fee
     const feeLamports = (amount * BigInt(config.feeRateBps)) / 10000n;

@@ -126,8 +126,8 @@ pub struct DepositToNotePool<'info> {
     )]
     pub credit_note: Account<'info, CreditNote>,
 
-    /// CHECK: Recipient — must match credit_note.recipient
-    pub recipient: UncheckedAccount<'info>,
+    /// Recipient — must match credit_note.recipient and must sign
+    pub recipient: Signer<'info>,
 
     #[account(mut)]
     pub payer: Signer<'info>,
