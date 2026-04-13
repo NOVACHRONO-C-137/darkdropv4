@@ -22,7 +22,7 @@ import bs58 from "bs58";
 
 export type Cluster = "mainnet" | "devnet" | "localnet";
 export type Asset = "sol" | "usdc";
-export type Encryption = "raw" | "aes";
+export type Encryption = "raw" | "aes" | "pbkdf2";
 
 export interface ClaimCodePayload {
   secret: bigint;
@@ -61,8 +61,8 @@ export async function encodeClaimCode(
   });
 
   if (password) {
-    const { encrypted, hint } = await encryptPayload(jsonPayload, password);
-    return `darkdrop:v4:${cluster}:${asset}:aes:${hint}:${encrypted}`;
+    const { encrypted, hint } = await encryptPayloadPBKDF2(jsonPayload, password);
+    return `darkdrop:v4:${cluster}:${asset}:pbkdf2:${hint}:${encrypted}`;
   }
 
   const encoded = uint8ToBase64url(new TextEncoder().encode(jsonPayload));
@@ -88,7 +88,15 @@ export async function decodeClaimCode(
   let jsonStr: string;
   let passwordHint: string | undefined;
 
-  if (encryption === "aes") {
+  if (encryption === "pbkdf2") {
+    if (!password) {
+      throw new Error("Password required for encrypted claim code");
+    }
+    passwordHint = parts[5];
+    const encryptedPayload = parts[6];
+    jsonStr = await decryptPayloadPBKDF2(encryptedPayload, password);
+  } else if (encryption === "aes") {
+    // Legacy: SHA-256 derived key (decode-only for old claim codes)
     if (!password) {
       throw new Error("Password required for encrypted claim code");
     }
@@ -180,6 +188,92 @@ async function decryptPayload(
   const ciphertext = packed.slice(12);
 
   const key = await deriveKey(password);
+  const decrypted = await globalThis.crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
+    key,
+    ciphertext.buffer as ArrayBuffer
+  );
+
+  return new TextDecoder().decode(decrypted);
+}
+
+// --- PBKDF2 + AES-256-GCM encryption (stronger KDF) ---
+
+const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_SALT_LEN = 16;
+
+async function deriveKeyPBKDF2(
+  password: string,
+  salt: Uint8Array
+): Promise<CryptoKey> {
+  const keyMaterial = await globalThis.crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password).buffer as ArrayBuffer,
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return globalThis.crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: salt.buffer as ArrayBuffer,
+      iterations: PBKDF2_ITERATIONS,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function encryptPayloadPBKDF2(
+  plaintext: string,
+  password: string
+): Promise<{ encrypted: string; hint: string }> {
+  const salt = globalThis.crypto.getRandomValues(new Uint8Array(PBKDF2_SALT_LEN));
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKeyPBKDF2(password, salt);
+  const encoded = new TextEncoder().encode(plaintext);
+
+  const ciphertext = new Uint8Array(
+    await globalThis.crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
+      key,
+      encoded.buffer as ArrayBuffer
+    )
+  );
+
+  // Pack: salt (16) + iv (12) + ciphertext+tag
+  const packed = new Uint8Array(PBKDF2_SALT_LEN + 12 + ciphertext.length);
+  packed.set(salt, 0);
+  packed.set(iv, PBKDF2_SALT_LEN);
+  packed.set(ciphertext, PBKDF2_SALT_LEN + 12);
+
+  // Hint: first 8 hex chars of SHA-256("darkdrop-hint:" + password)
+  const hintHash = new Uint8Array(
+    await globalThis.crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode("darkdrop-hint:" + password).buffer as ArrayBuffer
+    )
+  );
+  const hint = Array.from(hintHash.slice(0, 4))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return { encrypted: uint8ToBase64url(packed), hint };
+}
+
+async function decryptPayloadPBKDF2(
+  encrypted: string,
+  password: string
+): Promise<string> {
+  const packed = base64urlToUint8(encrypted);
+  const salt = packed.slice(0, PBKDF2_SALT_LEN);
+  const iv = packed.slice(PBKDF2_SALT_LEN, PBKDF2_SALT_LEN + 12);
+  const ciphertext = packed.slice(PBKDF2_SALT_LEN + 12);
+
+  const key = await deriveKeyPBKDF2(password, salt);
   const decrypted = await globalThis.crypto.subtle.decrypt(
     { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
     key,

@@ -17,7 +17,7 @@ pub fn handle_create_drop(
     _password_hash: [u8; 32],
 ) -> Result<()> {
     // Validate amount
-    require!(amount > 0, DarkDropError::ZeroAmount);
+    require!(amount >= MIN_DEPOSIT_LAMPORTS, DarkDropError::BelowMinDeposit);
     require!(
         amount <= ctx.accounts.vault.drop_cap,
         DarkDropError::AmountExceedsCap

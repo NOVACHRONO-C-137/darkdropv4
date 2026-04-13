@@ -9,6 +9,9 @@ pub const ROOT_HISTORY_SIZE: usize = 30;
 // Maximum drop amount in lamports (safety cap — 100 SOL initially)
 pub const MAX_DROP_AMOUNT: u64 = 100_000_000_000;
 
+// Minimum deposit to prevent tree pollution and Merkle root DoS (0.00001 SOL)
+pub const MIN_DEPOSIT_LAMPORTS: u64 = 10_000;
+
 // Number of public inputs in the Groth16 proof
 // [merkle_root, nullifier_hash, recipient, amount_commitment, password_hash, amount]
 pub const NR_PUBLIC_INPUTS: usize = 6;

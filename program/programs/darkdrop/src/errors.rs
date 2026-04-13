@@ -37,4 +37,7 @@ pub enum DarkDropError {
 
     #[msg("Invalid input data length")]
     InvalidInputLength,
+
+    #[msg("Amount below minimum deposit")]
+    BelowMinDeposit,
 }

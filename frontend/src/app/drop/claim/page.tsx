@@ -97,7 +97,7 @@ export default function ClaimPage() {
 
       const parts = claimCode.split(":");
       const encryption = parts[4];
-      if (encryption === "aes" && !password) {
+      if ((encryption === "aes" || encryption === "pbkdf2") && !password) {
         setError("This drop is password-protected. Enter the password.");
         setStage("error");
         return;
@@ -105,7 +105,7 @@ export default function ClaimPage() {
 
       const decoded = await decodeClaimCode(
         claimCode,
-        encryption === "aes" ? password : undefined
+        (encryption === "aes" || encryption === "pbkdf2") ? password : undefined
       );
       const { secret, nullifier, amount, blindingFactor, leafIndex } =
         decoded.payload;
