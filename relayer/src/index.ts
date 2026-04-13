@@ -34,6 +34,7 @@ try {
 // Make keypair available to route handlers
 app.locals.relayerKeypair = relayerKeypair;
 
+app.set("trust proxy", 1);
 app.use(cors({ origin: config.corsOrigin }));
 app.use(express.json({ limit: "10kb" }));
 
