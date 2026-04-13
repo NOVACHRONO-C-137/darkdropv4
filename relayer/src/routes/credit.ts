@@ -22,16 +22,8 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { config } from "../config";
-import fs from "fs";
-import os from "os";
 
 const router = Router();
-
-function loadRelayerKeypair(): Keypair {
-  const keypairPath = config.keypairPath.replace("~", os.homedir());
-  const secretKey = JSON.parse(fs.readFileSync(keypairPath, "utf8"));
-  return Keypair.fromSecretKey(new Uint8Array(secretKey));
-}
 
 const PROGRAM_ID = new PublicKey(config.programId);
 
@@ -83,7 +75,7 @@ router.post("/claim", async (req: Request, res: Response) => {
     if (body.inputs.length !== 96) return res.status(400).json({ error: "inputs must be 96 bytes" });
     if (body.salt.length !== 32) return res.status(400).json({ error: "salt must be 32 bytes" });
 
-    const relayer = loadRelayerKeypair();
+    const relayer: Keypair = req.app.locals.relayerKeypair;
     const connection = new Connection(config.rpcUrl, "confirmed");
 
     const nullifierHashBytes = new Uint8Array(body.nullifierHash);
@@ -158,7 +150,7 @@ router.post("/claim", async (req: Request, res: Response) => {
     if (err.message?.includes("already in use")) {
       return res.status(409).json({ error: "Nullifier already spent" });
     }
-    res.status(500).json({ error: "Relay failed: " + err.message });
+    res.status(500).json({ error: "Relay failed" });
   }
 });
 
@@ -178,7 +170,7 @@ router.post("/withdraw", async (req: Request, res: Response) => {
     }
     if (body.opening.length !== 72) return res.status(400).json({ error: "opening must be 72 bytes" });
 
-    const relayer = loadRelayerKeypair();
+    const relayer: Keypair = req.app.locals.relayerKeypair;
     const connection = new Connection(config.rpcUrl, "confirmed");
 
     const nullifierHashBytes = new Uint8Array(body.nullifierHash);
@@ -248,7 +240,7 @@ router.post("/withdraw", async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error("Relay credit withdraw error:", err.message);
-    res.status(500).json({ error: "Relay failed: " + err.message });
+    res.status(500).json({ error: "Relay failed" });
   }
 });
 

@@ -22,17 +22,8 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { config } from "../config";
-import fs from "fs";
-import os from "os";
 
 const router = Router();
-
-// Load relayer keypair
-function loadRelayerKeypair(): Keypair {
-  const keypairPath = config.keypairPath.replace("~", os.homedir());
-  const secretKey = JSON.parse(fs.readFileSync(keypairPath, "utf8"));
-  return Keypair.fromSecretKey(new Uint8Array(secretKey));
-}
 
 // PDA derivation helpers
 const PROGRAM_ID = new PublicKey(config.programId);
@@ -107,8 +98,7 @@ router.post("/", async (req: Request, res: Response) => {
     // Compute fee
     const feeLamports = (amount * BigInt(config.feeRateBps)) / 10000n;
 
-    // Load relayer keypair
-    const relayer = loadRelayerKeypair();
+    const relayer: Keypair = req.app.locals.relayerKeypair;
     const connection = new Connection(config.rpcUrl, "confirmed");
 
     // Resolve PDAs
@@ -197,7 +187,7 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Merkle root not recognized" });
     }
 
-    res.status(500).json({ error: "Relay failed: " + err.message });
+    res.status(500).json({ error: "Relay failed" });
   }
 });
 

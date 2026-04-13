@@ -25,17 +25,8 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { config } from "../config";
-import crypto from "crypto";
-import fs from "fs";
-import os from "os";
 
 const router = Router();
-
-function loadRelayerKeypair(): Keypair {
-  const keypairPath = config.keypairPath.replace("~", os.homedir());
-  const secretKey = JSON.parse(fs.readFileSync(keypairPath, "utf8"));
-  return Keypair.fromSecretKey(new Uint8Array(secretKey));
-}
 
 const PROGRAM_ID = new PublicKey(config.programId);
 
@@ -55,6 +46,9 @@ function getTreasuryPDA(): PublicKey {
 }
 
 const CREATE_DROP_DISCRIMINATOR = Buffer.from([157, 142, 145, 247, 92, 73, 59, 48]);
+
+// Track processed deposit TX signatures to prevent replay attacks
+const processedDepositTxs = new Set<string>();
 
 interface DepositRelayRequest {
   leaf: number[];           // 32 bytes
@@ -81,7 +75,12 @@ router.post("/", async (req: Request, res: Response) => {
     if (amount <= 0n) return res.status(400).json({ error: "Amount must be > 0" });
     if (amount > config.maxClaimAmount) return res.status(400).json({ error: "Amount exceeds relay limit" });
 
-    const relayer = loadRelayerKeypair();
+    // C-01 FIX: Reject replayed deposit TX signatures
+    if (processedDepositTxs.has(body.depositTx)) {
+      return res.status(409).json({ error: "Deposit TX already processed" });
+    }
+
+    const relayer: Keypair = req.app.locals.relayerKeypair;
     const connection = new Connection(config.rpcUrl, "confirmed");
 
     // Verify the deposit TX transferred the correct amount to the relayer
@@ -114,6 +113,9 @@ router.post("/", async (req: Request, res: Response) => {
       });
     }
 
+    // Mark TX as processed BEFORE submitting on-chain (prevent concurrent replays)
+    processedDepositTxs.add(body.depositTx);
+
     // Build create_drop instruction with relayer as sender
     const vault = getVaultPDA();
     const merkleTree = getMerkleTreePDA(vault);
@@ -145,9 +147,16 @@ router.post("/", async (req: Request, res: Response) => {
     const tx = new Transaction().add(ix);
     tx.feePayer = relayer.publicKey;
 
-    const signature = await sendAndConfirmTransaction(connection, tx, [relayer], {
-      commitment: "confirmed",
-    });
+    let signature: string;
+    try {
+      signature = await sendAndConfirmTransaction(connection, tx, [relayer], {
+        commitment: "confirmed",
+      });
+    } catch (err) {
+      // On-chain TX failed — remove from processed set so user can retry
+      processedDepositTxs.delete(body.depositTx);
+      throw err;
+    }
 
     console.log(
       `Deposit relayed: ${signature} | amount=${amount} | depositTx=${body.depositTx}`
@@ -160,7 +169,7 @@ router.post("/", async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error("Relay deposit error:", err.message);
-    res.status(500).json({ error: "Relay failed: " + err.message });
+    res.status(500).json({ error: "Relay failed" });
   }
 });
 

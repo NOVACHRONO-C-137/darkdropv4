@@ -13,15 +13,29 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
 import cors from "cors";
+import { Keypair } from "@solana/web3.js";
 import { config } from "./config";
+import { loadRelayerKeypair } from "./keypair";
 import claimRouter from "./routes/claim";
 import depositRouter from "./routes/deposit";
 import creditRouter from "./routes/credit";
 
 const app = express();
 
-app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+// Load keypair once at startup (not on every request)
+let relayerKeypair: Keypair;
+try {
+  relayerKeypair = loadRelayerKeypair();
+} catch (err: any) {
+  console.error("Failed to load relayer keypair:", err.message);
+  process.exit(1);
+}
+
+// Make keypair available to route handlers
+app.locals.relayerKeypair = relayerKeypair;
+
+app.use(cors({ origin: config.corsOrigin }));
+app.use(express.json({ limit: "10kb" }));
 
 // Rate limiting
 app.use(
@@ -33,17 +47,13 @@ app.use(
   })
 );
 
-// Health check — includes relayer pubkey for private deposit flow
+// Health check
 app.get("/health", (_req, res) => {
-  try {
-    const keypairPath = config.keypairPath.replace("~", require("os").homedir());
-    const secretKey = JSON.parse(require("fs").readFileSync(keypairPath, "utf8"));
-    const { Keypair } = require("@solana/web3.js");
-    const relayer = Keypair.fromSecretKey(new Uint8Array(secretKey));
-    res.json({ status: "ok", version: "v4.1", relayerPubkey: relayer.publicKey.toBase58() });
-  } catch {
-    res.json({ status: "ok", version: "v4.1" });
-  }
+  res.json({
+    status: "ok",
+    version: "v4.1",
+    relayerPubkey: relayerKeypair.publicKey.toBase58(),
+  });
 });
 
 // Relay endpoints
@@ -55,4 +65,6 @@ app.listen(config.port, () => {
   console.log(`DarkDrop V4 Relayer running on port ${config.port}`);
   console.log(`RPC: ${config.rpcUrl}`);
   console.log(`Fee: ${config.feeRateBps} bps`);
+  console.log(`CORS: ${config.corsOrigin}`);
+  console.log(`Relayer: ${relayerKeypair.publicKey.toBase58()}`);
 });

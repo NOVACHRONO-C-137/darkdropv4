@@ -2,6 +2,11 @@
  * DarkDrop V4 — Relayer Configuration
  */
 
+const feeRateBps = parseInt(process.env.FEE_RATE_BPS || "50");
+if (feeRateBps < 0 || feeRateBps > 500) {
+  throw new Error(`FEE_RATE_BPS=${feeRateBps} out of bounds (0-500). Refusing to start.`);
+}
+
 export const config = {
   // Solana RPC
   rpcUrl: process.env.RPC_URL || "https://api.devnet.solana.com",
@@ -13,8 +18,11 @@ export const config = {
   // DarkDrop program ID
   programId: "GSig1QYVwPVhHF6oVEwhadAwdWjTqtq6H5cSMEkfAgkU",
 
-  // Relay fee: percentage of claim amount (basis points, 100 = 1%)
-  feeRateBps: parseInt(process.env.FEE_RATE_BPS || "50"), // 0.5% default
+  // Relay fee: percentage of claim amount (basis points, 100 = 1%, max 500 = 5%)
+  feeRateBps,
+
+  // Allowed frontend origin for CORS (set to your domain in production)
+  corsOrigin: process.env.CORS_ORIGIN || "*",
 
   // Server port
   port: parseInt(process.env.PORT || "3001"),
