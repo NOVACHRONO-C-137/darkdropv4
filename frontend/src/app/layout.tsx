@@ -3,8 +3,10 @@ import { Fira_Code } from "next/font/google";
 import "./globals.css";
 import WalletProvider from "@/providers/WalletProvider";
 import { DotBackground } from "@/components/DotBackground";
+import RetroScrollbar from "@/components/RetroScrollbar";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+
 
 const fira = Fira_Code({
   variable: "--font-fira",
@@ -31,6 +33,7 @@ export default function RootLayout({
         <WalletProvider>
           <div className="relative min-h-screen bg-[color:var(--background)] text-[color:var(--text)]">
             <DotBackground />
+            <RetroScrollbar />
             <Navbar />
             <main className="relative z-10 min-h-screen pb-16">{children}</main>
             <Footer />

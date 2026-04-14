@@ -27,7 +27,11 @@
   --font-mono: var(--font-fira);
 }
 
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
@@ -39,12 +43,16 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-a { color: var(--accent); text-decoration: none; }
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
 
 /* ───── ARCADE GRID OVERLAY ───── */
 .arcade-grid {
   position: relative;
 }
+
 .arcade-grid::before {
   content: "";
   position: absolute;
@@ -63,11 +71,13 @@ a { color: var(--accent); text-decoration: none; }
   box-shadow: var(--shadow-arcade-sm);
   position: relative;
 }
+
 @media (min-width: 640px) {
   .arcade-panel {
     box-shadow: var(--shadow-arcade);
   }
 }
+
 .arcade-panel-header {
   border-bottom: 2px solid var(--border-dim);
   padding: 0.75rem 1.25rem;
@@ -76,13 +86,15 @@ a { color: var(--accent); text-decoration: none; }
   gap: 0.75rem;
   background-color: rgba(0, 255, 65, 0.02);
 }
+
 .arcade-panel-body {
   padding: 1.25rem;
 }
 
 /* ───── ARCADE BUTTON ───── */
 /* Scope to avoid overriding wallet-adapter buttons */
-button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]), .arcade-btn {
+button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]),
+.arcade-btn {
   font-family: inherit;
   color: var(--accent);
   background-color: rgba(0, 255, 65, 0.06);
@@ -97,15 +109,18 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]), .arcade-bt
   transition: all 0.1s ease;
   position: relative;
 }
+
 button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):hover:not(:disabled) {
   background-color: var(--accent-glow);
   box-shadow: var(--shadow-arcade-sm);
   transform: translate(1px, 1px);
 }
+
 button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):active:not(:disabled) {
   box-shadow: none;
   transform: translate(3px, 3px);
 }
+
 button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   cursor: not-allowed;
   opacity: 0.35;
@@ -131,6 +146,7 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   cursor: pointer !important;
   transition: all 0.1s ease !important;
 }
+
 @media (min-width: 640px) {
   .wallet-adapter-button {
     font-size: 0.6rem !important;
@@ -139,10 +155,12 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
     letter-spacing: 0.15em !important;
   }
 }
+
 .wallet-adapter-button:hover {
   background-color: rgba(0, 255, 65, 0.12) !important;
   box-shadow: 1px 1px 0 rgba(0, 255, 65, 0.15) !important;
 }
+
 .wallet-adapter-button-trigger {
   background-color: rgba(0, 255, 65, 0.06) !important;
 }
@@ -151,6 +169,7 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
 .wallet-adapter-dropdown {
   z-index: 100 !important;
 }
+
 .wallet-adapter-dropdown-list {
   background-color: #0a0a0a !important;
   border: 2px solid rgba(0, 255, 65, 0.2) !important;
@@ -159,6 +178,7 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   padding: 4px !important;
   z-index: 100 !important;
 }
+
 .wallet-adapter-dropdown-list-item {
   background-color: transparent !important;
   border-radius: 0 !important;
@@ -168,6 +188,7 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   letter-spacing: 0.1em !important;
   border: 1px solid transparent !important;
 }
+
 .wallet-adapter-dropdown-list-item:hover {
   background-color: rgba(0, 255, 65, 0.06) !important;
   border-color: rgba(0, 255, 65, 0.1) !important;
@@ -179,15 +200,18 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   background: rgba(0, 0, 0, 0.85) !important;
   z-index: 200 !important;
 }
+
 .wallet-adapter-modal-overlay {
   background: transparent !important;
 }
+
 .wallet-adapter-modal-container {
   margin: 1rem !important;
   min-height: auto !important;
   align-items: center !important;
   justify-content: center !important;
 }
+
 .wallet-adapter-modal-wrapper {
   background-color: #0a0a0a !important;
   border: 2px solid rgba(0, 255, 65, 0.2) !important;
@@ -199,12 +223,14 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   width: 100% !important;
   overflow: visible !important;
 }
+
 @media (min-width: 640px) {
   .wallet-adapter-modal-wrapper {
     max-width: 400px !important;
     box-shadow: 6px 6px 0 rgba(0, 255, 65, 0.3) !important;
   }
 }
+
 .wallet-adapter-modal-title {
   color: #00ff41 !important;
   font-family: var(--font-fira), monospace !important;
@@ -213,6 +239,7 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   text-transform: uppercase !important;
   padding: 24px 24px 16px 24px !important;
 }
+
 .wallet-adapter-modal-button-close {
   background-color: #0a0a0a !important;
   border: 2px solid rgba(0, 255, 65, 0.2) !important;
@@ -224,16 +251,19 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   right: 12px !important;
   z-index: 10 !important;
 }
+
 .wallet-adapter-modal-button-close:hover {
   background-color: rgba(255, 0, 68, 0.1) !important;
   border-color: #ff0044 !important;
   color: #ff0044 !important;
 }
+
 .wallet-adapter-modal-button-close svg {
   fill: currentColor !important;
   width: 14px !important;
   height: 14px !important;
 }
+
 .wallet-adapter-modal-middle {
   display: none !important;
 }
@@ -243,9 +273,11 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   margin: 0 !important;
   padding: 0 24px 24px 24px !important;
 }
+
 .wallet-adapter-modal-list li {
   border-radius: 0 !important;
 }
+
 .wallet-adapter-modal-wrapper .wallet-adapter-button {
   border: 1px solid rgba(0, 255, 65, 0.1) !important;
   box-shadow: none !important;
@@ -265,10 +297,12 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   text-overflow: unset !important;
   letter-spacing: 0.05em !important;
 }
+
 .wallet-adapter-modal-wrapper .wallet-adapter-button:hover {
   border-color: rgba(0, 255, 65, 0.4) !important;
   background-color: rgba(0, 255, 65, 0.06) !important;
 }
+
 .wallet-adapter-modal-wrapper .wallet-adapter-button img,
 .wallet-adapter-modal-wrapper .wallet-adapter-button-start-icon {
   display: inline-flex !important;
@@ -276,15 +310,18 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   height: 24px !important;
   flex-shrink: 0 !important;
 }
+
 .wallet-adapter-modal-wrapper .wallet-adapter-button span {
   text-align: left !important;
 }
+
 /* "More options" collapse button */
 .wallet-adapter-modal-collapse-button {
   color: rgba(224, 224, 224, 0.4) !important;
   font-family: var(--font-fira), monospace !important;
   border-radius: 0 !important;
 }
+
 .wallet-adapter-modal-collapse-button svg {
   fill: rgba(224, 224, 224, 0.4) !important;
 }
@@ -296,11 +333,13 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   font-weight: 700;
   box-shadow: 3px 3px 0 rgba(0, 200, 30, 0.5);
 }
+
 .arcade-btn-primary:hover:not(:disabled) {
   background-color: #33ff66;
   box-shadow: 2px 2px 0 rgba(0, 200, 30, 0.4);
   transform: translate(1px, 1px);
 }
+
 .arcade-btn-primary:active:not(:disabled) {
   box-shadow: none;
   transform: translate(3px, 3px);
@@ -313,6 +352,7 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
   color: rgba(224, 224, 224, 0.5);
   box-shadow: var(--shadow-arcade-sm);
 }
+
 .arcade-btn-ghost:hover:not(:disabled) {
   border-color: var(--accent-dim);
   color: var(--text);
@@ -320,7 +360,9 @@ button:not([class*="wallet-adapter"]):not([class*="wallet_adapter"]):disabled {
 }
 
 /* ───── ARCADE INPUT ───── */
-input, textarea, select {
+input,
+textarea,
+select {
   font-family: inherit;
   color: var(--text);
   background-color: #030303;
@@ -331,18 +373,25 @@ input, textarea, select {
   max-width: 100%;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-input:focus, textarea:focus, select:focus {
+
+input:focus,
+textarea:focus,
+select:focus {
   border-color: var(--accent);
   box-shadow: var(--shadow-inset), 0 0 8px rgba(0, 255, 65, 0.15);
   outline: none;
 }
 
-::selection { background: var(--accent); color: black; }
+::selection {
+  background: var(--accent);
+  color: black;
+}
 
 /* ───── RADIAL GLOW ACCENT ───── */
 .arcade-glow {
   position: relative;
 }
+
 .arcade-glow::after {
   content: "";
   position: absolute;
@@ -360,6 +409,7 @@ input:focus, textarea:focus, select:focus {
   background-color: var(--accent);
   box-shadow: 0 0 6px var(--accent), 0 0 12px rgba(0, 255, 65, 0.3);
 }
+
 .arcade-dot-off {
   background-color: rgba(224, 224, 224, 0.2);
   box-shadow: none;
@@ -383,13 +433,26 @@ input:focus, textarea:focus, select:focus {
   content: "";
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.15) 2px,
-    rgba(0, 0, 0, 0.15) 4px
-  );
+  background: repeating-linear-gradient(0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.15) 2px,
+      rgba(0, 0, 0, 0.15) 4px);
   pointer-events: none;
   z-index: 1;
+}
+
+/* ───── HIDE NATIVE SCROLLBAR ───── */
+html,
+body {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+  /* Chrome, Safari, Edge, Opera */
 }
