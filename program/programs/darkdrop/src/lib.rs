@@ -204,4 +204,15 @@ pub mod darkdrop {
     pub fn initialize_mint_vault(ctx: Context<InitializeMintVault>) -> Result<()> {
         instructions::initialize_mint_vault::handle_initialize_mint_vault(ctx)
     }
+
+    /// SPL parallel of `create_drop`. Accepts an SPL token deposit into
+    /// the program-owned mint vault and inserts the leaf into the per-mint
+    /// Merkle tree. User-facing.
+    pub fn create_drop_spl(
+        ctx: Context<CreateDropSpl>,
+        leaf: [u8; 32],
+        amount: u64,
+    ) -> Result<()> {
+        instructions::create_drop_spl::handle_create_drop_spl(ctx, leaf, amount)
+    }
 }

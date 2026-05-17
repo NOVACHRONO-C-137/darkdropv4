@@ -17,6 +17,7 @@ pub mod create_drop_to_pool;
 pub mod initialize_mint_config;
 pub mod initialize_mint_trees;
 pub mod initialize_mint_vault;
+pub mod create_drop_spl;
 
 pub use initialize::*;
 pub use create_drop::*;
@@ -37,3 +38,4 @@ pub use create_drop_to_pool::*;
 pub use initialize_mint_config::*;
 pub use initialize_mint_trees::*;
 pub use initialize_mint_vault::*;
+pub use create_drop_spl::*;
