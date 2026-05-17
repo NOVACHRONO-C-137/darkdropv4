@@ -230,4 +230,19 @@ pub mod darkdrop {
             ctx, nullifier_hash, proof, inputs, salt,
         )
     }
+
+    /// SPL parallel of `withdraw_credit`. Opens the CreditNoteSpl
+    /// commitment, transfers tokens out of the mint vault, closes the
+    /// note. Supports the same `rate` basis-points fee model as the
+    /// SOL flow (≤ 500 bps), with the fee paid in source mint to payer.
+    pub fn withdraw_credit_spl(
+        ctx: Context<WithdrawCreditSpl>,
+        nullifier_hash: [u8; 32],
+        opening: Vec<u8>,
+        rate: u16,
+    ) -> Result<()> {
+        instructions::withdraw_credit_spl::handle_withdraw_credit_spl(
+            ctx, nullifier_hash, opening, rate,
+        )
+    }
 }
