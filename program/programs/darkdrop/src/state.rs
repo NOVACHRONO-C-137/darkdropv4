@@ -328,3 +328,214 @@ pub struct ProofData {
     /// Proof point C (G1) — 64 bytes
     pub proof_c: [u8; 64],
 }
+
+// ─── SPL / multi-mint extension ──────────────────────────────────────────────
+//
+// All types below are strictly additive. They use distinct PDA seed prefixes
+// (`*_spl`) so the SOL flow's existing PDAs (`merkle_tree`, `note_pool_tree`,
+// `nullifier`, `pool_nullifier`, `credit`, `treasury`) remain byte-identical
+// and any claim/credit/deposit issued before this change continues to resolve
+// against unchanged seed namespaces.
+//
+// Per-mint isolation: each supported mint M gets its own MintConfig PDA, its
+// own pair of trees (main + note pool), and its own nullifier namespaces. The
+// shared Vault PDA continues to track SOL-only obligation counters; per-mint
+// obligation counters live on each mint's MintConfig.
+
+/// MintConfig — per-mint state record.
+/// PDA seeds: [b"mint_config", mint.as_ref()]
+///
+/// Created by `initialize_mint_config(mint)` at the vault authority's
+/// discretion. Existence of this account = the mint is registered. The
+/// trees and mint vault are populated by a later, separate instruction so
+/// `initialize_mint_config` stays small and individually auditable.
+///
+/// The `paused` flag is an admin kill-switch that disables new deposits
+/// for this mint without affecting outstanding withdrawals, so users
+/// always have a path to exit even for a paused mint.
+#[account]
+pub struct MintConfig {
+    /// PDA bump seed.
+    pub bump: u8,
+    /// The SPL mint this record governs.
+    pub mint: Pubkey,
+    /// Unix timestamp of registration. Set once at init.
+    pub registered_at: i64,
+    /// Pubkey of the per-mint main Merkle tree (`MerkleTreeSpl`). Set to
+    /// `Pubkey::default()` at init; populated by a later
+    /// `initialize_mint_trees`-style instruction.
+    pub merkle_tree: Pubkey,
+    /// Pubkey of the per-mint note pool tree (`NotePoolTreeSpl`). Same
+    /// lifecycle as `merkle_tree`.
+    pub note_pool_tree: Pubkey,
+    /// Pubkey of the per-mint program-owned token custody account. Set to
+    /// `Pubkey::default()` at init; populated when the mint vault is
+    /// created.
+    pub mint_vault: Pubkey,
+    /// Total deposited for this mint, in its base units.
+    /// Floor enforced by per-mint `admin_sweep_spl`.
+    pub total_deposited: u64,
+    /// Total withdrawn for this mint, in its base units.
+    pub total_withdrawn: u64,
+    /// Admin kill-switch. When true, new deposits for this mint must fail
+    /// with `MintPaused`. Outstanding credit notes can still withdraw.
+    pub paused: bool,
+}
+
+impl MintConfig {
+    pub const SIZE: usize = 8   // discriminator
+        + 1    // bump
+        + 32   // mint
+        + 8    // registered_at
+        + 32   // merkle_tree
+        + 32   // note_pool_tree
+        + 32   // mint_vault
+        + 8    // total_deposited
+        + 8    // total_withdrawn
+        + 1;   // paused
+}
+
+/// MerkleTreeSpl — per-mint variant of `MerkleTreeAccount`.
+/// PDA seeds: [b"merkle_tree_spl", mint.as_ref()]
+///
+/// Identical layout to `MerkleTreeAccount`; the only differences are the
+/// seed prefix and the embedded `mint` cross-reference. `ROOT_HISTORY_SIZE`
+/// and `MERKLE_DEPTH` match the SOL trees so SPL claim codes inherit the
+/// same root-rotation behavior.
+#[account(zero_copy(unsafe))]
+#[repr(C)]
+#[derive(Debug)]
+pub struct MerkleTreeSpl {
+    /// Associated vault (same singleton as the SOL path).
+    pub vault: Pubkey,
+    /// Mint this tree is bound to. Cross-checked against the ix `mint`
+    /// argument on every write.
+    pub mint: Pubkey,
+    /// Next available leaf index.
+    pub next_index: u32,
+    /// Index into root_history circular buffer.
+    pub root_history_index: u32,
+    /// Current Merkle root.
+    pub current_root: [u8; 32],
+    /// Circular buffer of recent roots.
+    pub root_history: [[u8; 32]; ROOT_HISTORY_SIZE],
+    /// Filled subtrees at each level (for incremental insertion).
+    pub filled_subtrees: [[u8; 32]; MERKLE_DEPTH],
+}
+
+impl MerkleTreeSpl {
+    /// Check if a root exists in the history.
+    pub fn is_known_root(&self, root: &[u8; 32]) -> bool {
+        if *root == self.current_root {
+            return true;
+        }
+        for i in 0..ROOT_HISTORY_SIZE {
+            if self.root_history[i] == *root {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+/// NotePoolTreeSpl — per-mint variant of `NotePoolTree`.
+/// PDA seeds: [b"note_pool_tree_spl", mint.as_ref()]
+#[account(zero_copy(unsafe))]
+#[repr(C)]
+#[derive(Debug)]
+pub struct NotePoolTreeSpl {
+    /// Associated vault.
+    pub vault: Pubkey,
+    /// Mint this tree is bound to.
+    pub mint: Pubkey,
+    /// Next available leaf index.
+    pub next_index: u32,
+    /// Index into root_history circular buffer.
+    pub root_history_index: u32,
+    /// Current Merkle root.
+    pub current_root: [u8; 32],
+    /// Circular buffer of recent roots.
+    pub root_history: [[u8; 32]; ROOT_HISTORY_SIZE],
+    /// Filled subtrees at each level (for incremental insertion).
+    pub filled_subtrees: [[u8; 32]; MERKLE_DEPTH],
+}
+
+impl NotePoolTreeSpl {
+    /// Check if a root exists in the history.
+    pub fn is_known_root(&self, root: &[u8; 32]) -> bool {
+        if *root == self.current_root {
+            return true;
+        }
+        for i in 0..ROOT_HISTORY_SIZE {
+            if self.root_history[i] == *root {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+/// NullifierAccountSpl — per-mint nullifier record.
+/// PDA seeds: [b"nullifier_spl", mint.as_ref(), nullifier_hash.as_ref()]
+///
+/// Strictly separated from the SOL `[b"nullifier", hash]` namespace. The
+/// cross-namespace collision probability is 2^-256, so the separation is
+/// for audit-surface clarity, not necessity — each mint's lifecycle stays
+/// independently auditable.
+#[account]
+pub struct NullifierAccountSpl {
+    /// The nullifier hash (for reference).
+    pub nullifier_hash: [u8; 32],
+}
+
+impl NullifierAccountSpl {
+    pub const SIZE: usize = 8 + 32;
+}
+
+/// PoolNullifierAccountSpl — per-mint pool nullifier record.
+/// PDA seeds: [b"pool_nullifier_spl", mint.as_ref(), nullifier_hash.as_ref()]
+#[account]
+pub struct PoolNullifierAccountSpl {
+    pub nullifier_hash: [u8; 32],
+}
+
+impl PoolNullifierAccountSpl {
+    pub const SIZE: usize = 8 + 32;
+}
+
+/// CreditNoteSpl — wider variant of `CreditNote` that carries the source mint.
+/// PDA seeds: [b"credit_spl", mint.as_ref(), nullifier_hash.as_ref()]
+///
+/// The existing `CreditNote` type is unchanged: legacy SOL credit notes
+/// continue to resolve against `[b"credit", nullifier_hash]` via the
+/// existing `withdraw_credit` ix. SPL claim codes issued after this change
+/// land in the SPL namespace and are withdrawn via `withdraw_credit_spl`
+/// (to be added), which reads this wider layout.
+///
+/// `commitment` is the same re-randomized form as `CreditNote.commitment`
+/// (M-01-NEW); the `mint` is stored alongside, not folded into the
+/// commitment. The PDA seeds include `mint` for symmetry with
+/// `NullifierAccountSpl`, so a hypothetical (negligible-probability)
+/// cross-mint nullifier_hash collision cannot cause a credit-note PDA
+/// collision either.
+#[account]
+pub struct CreditNoteSpl {
+    pub bump: u8,
+    pub recipient: Pubkey,
+    pub commitment: [u8; 32],
+    pub nullifier_hash: [u8; 32],
+    pub salt: [u8; 32],
+    pub created_at: i64,
+    pub mint: Pubkey,
+}
+
+impl CreditNoteSpl {
+    pub const SIZE: usize = 8   // discriminator
+        + 1    // bump
+        + 32   // recipient
+        + 32   // commitment
+        + 32   // nullifier_hash
+        + 32   // salt
+        + 8    // created_at
+        + 32;  // mint
+}

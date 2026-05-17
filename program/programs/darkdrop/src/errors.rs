@@ -67,4 +67,14 @@ pub enum DarkDropError {
 
     #[msg("Authority rotation acceptance attempted before ROTATION_DELAY elapsed")]
     RotationTooEarly,
+
+    // ─── SPL / multi-mint extension ──────────────────────────────────────────
+    #[msg("Mint is not registered with the program")]
+    MintNotRegistered,
+
+    #[msg("Mint is paused — new deposits disabled")]
+    MintPaused,
+
+    #[msg("Mint does not match the expected mint for this account")]
+    WrongMint,
 }

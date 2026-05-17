@@ -184,4 +184,11 @@ pub mod darkdrop {
     ) -> Result<()> {
         instructions::create_drop_to_pool::handle_create_drop_to_pool(ctx, amount, pool_params)
     }
+
+    /// Register a new SPL mint with the program. Smallest viable surface:
+    /// creates the `MintConfig` PDA only; trees and mint vault are set up
+    /// by a later instruction. Authority-gated via Vault.has_one.
+    pub fn initialize_mint_config(ctx: Context<InitializeMintConfig>) -> Result<()> {
+        instructions::initialize_mint_config::handle_initialize_mint_config(ctx)
+    }
 }
