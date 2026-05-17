@@ -20,6 +20,7 @@ pub mod initialize_mint_vault;
 pub mod create_drop_spl;
 pub mod claim_credit_spl;
 pub mod withdraw_credit_spl;
+pub mod pause_deposits;
 
 pub use initialize::*;
 pub use create_drop::*;
@@ -43,3 +44,4 @@ pub use initialize_mint_vault::*;
 pub use create_drop_spl::*;
 pub use claim_credit_spl::*;
 pub use withdraw_credit_spl::*;
+pub use pause_deposits::*;

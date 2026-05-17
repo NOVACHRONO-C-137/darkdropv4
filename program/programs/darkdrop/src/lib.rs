@@ -245,4 +245,14 @@ pub mod darkdrop {
             ctx, nullifier_hash, opening, rate,
         )
     }
+
+    /// Admin kill-switch for a registered mint. Flips
+    /// `MintConfig.paused`; subsequent `create_drop_spl` calls return
+    /// `MintPaused` while existing credit notes remain withdrawable.
+    pub fn pause_deposits(
+        ctx: Context<PauseDeposits>,
+        paused: bool,
+    ) -> Result<()> {
+        instructions::pause_deposits::handle_pause_deposits(ctx, paused)
+    }
 }
