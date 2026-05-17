@@ -265,4 +265,17 @@ pub mod darkdrop {
     ) -> Result<()> {
         instructions::admin_sweep_spl::handle_admin_sweep_spl(ctx, amount)
     }
+
+    /// SPL parallel of `create_drop_to_pool`. One-TX deposit of SPL
+    /// tokens directly into the per-mint note pool layer. Skips the
+    /// main tree; the V3 claim path picks it up.
+    pub fn create_drop_to_pool_spl(
+        ctx: Context<CreateDropToPoolSpl>,
+        amount: u64,
+        pool_params: Vec<u8>,
+    ) -> Result<()> {
+        instructions::create_drop_to_pool_spl::handle_create_drop_to_pool_spl(
+            ctx, amount, pool_params,
+        )
+    }
 }
