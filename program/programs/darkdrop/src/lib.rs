@@ -191,4 +191,11 @@ pub mod darkdrop {
     pub fn initialize_mint_config(ctx: Context<InitializeMintConfig>) -> Result<()> {
         instructions::initialize_mint_config::handle_initialize_mint_config(ctx)
     }
+
+    /// Initialize the per-mint main Merkle tree and note pool tree.
+    /// Mint must already be registered via `initialize_mint_config`.
+    /// Authority-gated via Vault.has_one.
+    pub fn initialize_mint_trees(ctx: Context<InitializeMintTrees>) -> Result<()> {
+        instructions::initialize_mint_trees::handle_initialize_mint_trees(ctx)
+    }
 }

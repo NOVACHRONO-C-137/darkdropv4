@@ -15,6 +15,7 @@ pub mod migrate_schema_v2;
 pub mod authority_rotation;
 pub mod create_drop_to_pool;
 pub mod initialize_mint_config;
+pub mod initialize_mint_trees;
 
 pub use initialize::*;
 pub use create_drop::*;
@@ -33,3 +34,4 @@ pub use migrate_schema_v2::*;
 pub use authority_rotation::*;
 pub use create_drop_to_pool::*;
 pub use initialize_mint_config::*;
+pub use initialize_mint_trees::*;
