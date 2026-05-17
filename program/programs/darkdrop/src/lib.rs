@@ -278,4 +278,18 @@ pub mod darkdrop {
             ctx, amount, pool_params,
         )
     }
+
+    /// SPL parallel of `claim_from_note_pool`. Verifies a V3 proof
+    /// against the per-mint pool tree, creates a per-mint pool
+    /// nullifier and a fresh CreditNoteSpl. ZERO TOKEN MOVEMENT.
+    pub fn claim_from_note_pool_spl(
+        ctx: Context<ClaimFromNotePoolSpl>,
+        pool_nullifier_hash: [u8; 32],
+        proof: ProofData,
+        inputs: Vec<u8>,
+    ) -> Result<()> {
+        instructions::claim_from_note_pool_spl::handle_claim_from_note_pool_spl(
+            ctx, pool_nullifier_hash, proof, inputs,
+        )
+    }
 }

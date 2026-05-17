@@ -23,6 +23,7 @@ pub mod withdraw_credit_spl;
 pub mod pause_deposits;
 pub mod admin_sweep_spl;
 pub mod create_drop_to_pool_spl;
+pub mod claim_from_note_pool_spl;
 
 pub use initialize::*;
 pub use create_drop::*;
@@ -49,3 +50,4 @@ pub use withdraw_credit_spl::*;
 pub use pause_deposits::*;
 pub use admin_sweep_spl::*;
 pub use create_drop_to_pool_spl::*;
+pub use claim_from_note_pool_spl::*;
