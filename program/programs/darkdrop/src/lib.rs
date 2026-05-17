@@ -255,4 +255,14 @@ pub mod darkdrop {
     ) -> Result<()> {
         instructions::pause_deposits::handle_pause_deposits(ctx, paused)
     }
+
+    /// SPL parallel of `admin_sweep`. Sweeps excess tokens out of the
+    /// mint vault to an admin-chosen destination ATA, never below the
+    /// user-owed floor (total_deposited - total_withdrawn).
+    pub fn admin_sweep_spl(
+        ctx: Context<AdminSweepSpl>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::admin_sweep_spl::handle_admin_sweep_spl(ctx, amount)
+    }
 }
