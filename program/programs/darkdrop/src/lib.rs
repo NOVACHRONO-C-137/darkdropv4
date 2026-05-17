@@ -215,4 +215,19 @@ pub mod darkdrop {
     ) -> Result<()> {
         instructions::create_drop_spl::handle_create_drop_spl(ctx, leaf, amount)
     }
+
+    /// SPL parallel of `claim_credit`. Verifies a V2 ZK proof, creates a
+    /// per-mint nullifier and a CreditNoteSpl with re-randomized
+    /// commitment. ZERO TOKEN MOVEMENT.
+    pub fn claim_credit_spl(
+        ctx: Context<ClaimCreditSpl>,
+        nullifier_hash: [u8; 32],
+        proof: ProofData,
+        inputs: Vec<u8>,
+        salt: [u8; 32],
+    ) -> Result<()> {
+        instructions::claim_credit_spl::handle_claim_credit_spl(
+            ctx, nullifier_hash, proof, inputs, salt,
+        )
+    }
 }
