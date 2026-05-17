@@ -198,4 +198,10 @@ pub mod darkdrop {
     pub fn initialize_mint_trees(ctx: Context<InitializeMintTrees>) -> Result<()> {
         instructions::initialize_mint_trees::handle_initialize_mint_trees(ctx)
     }
+
+    /// Create the program-owned SPL token account that holds custody for
+    /// this mint. Trees must already be initialized. Authority-gated.
+    pub fn initialize_mint_vault(ctx: Context<InitializeMintVault>) -> Result<()> {
+        instructions::initialize_mint_vault::handle_initialize_mint_vault(ctx)
+    }
 }
