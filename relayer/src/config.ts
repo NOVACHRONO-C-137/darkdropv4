@@ -15,8 +15,11 @@ export const config = {
   keypairPath:
     process.env.RELAYER_KEYPAIR || "~/.config/solana/relayer.json",
 
-  // DarkDrop program ID
-  programId: "GSig1QYVwPVhHF6oVEwhadAwdWjTqtq6H5cSMEkfAgkU",
+  // SOL program ID. Defaults to the live program. For testing the new binary's
+  // SOL behavior against the test program, set SOL_PROGRAM_ID=8b8JX1nh...
+  // before starting the relayer. DO NOT commit a non-default override.
+  programId:
+    process.env.SOL_PROGRAM_ID || "GSig1QYVwPVhHF6oVEwhadAwdWjTqtq6H5cSMEkfAgkU",
 
   // SPL routes target the test program until the live program is upgraded
   // with USDC support. SOL routes continue to use `programId` above.
