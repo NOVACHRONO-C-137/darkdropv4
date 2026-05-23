@@ -19,6 +19,7 @@ import { loadRelayerKeypair } from "./keypair";
 import claimRouter from "./routes/claim";
 import depositRouter from "./routes/deposit";
 import creditRouter from "./routes/credit";
+import creditSplRouter from "./routes/credit-spl";
 import poolRouter from "./routes/pool";
 import poolClaimRouter from "./routes/pool-claim";
 
@@ -63,6 +64,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/relay/claim", claimRouter);
 app.use("/api/relay/create-drop", depositRouter);
 app.use("/api/relay/credit", creditRouter);
+app.use("/api/relay/credit-spl", creditSplRouter);
 app.use("/api/relay/create-drop-to-pool", poolRouter);
 app.use("/api/relay/pool/claim", poolClaimRouter);
 
