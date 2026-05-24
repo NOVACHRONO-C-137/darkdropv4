@@ -32,7 +32,9 @@ import {
 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
-const PROGRAM_ID = new PublicKey("8b8JX1nhcG5UryRUE6Zm85LLcTA6PjquEkUVwWRV6Rrn");
+const PROGRAM_ID = new PublicKey(
+  process.env.PROGRAM_ID ?? "8b8JX1nhcG5UryRUE6Zm85LLcTA6PjquEkUVwWRV6Rrn"
+);
 const MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 const RPC_URL = "https://api.devnet.solana.com";
 const WALLET_PATH = `${os.homedir()}/.config/solana/id.json`;
