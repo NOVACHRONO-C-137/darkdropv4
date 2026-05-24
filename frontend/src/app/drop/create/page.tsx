@@ -7,6 +7,12 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from "@solana/web3.js";
+import {
+  getAssociatedTokenAddressSync,
+  getAccount,
+  TokenAccountNotFoundError,
+  TokenInvalidAccountOwnerError,
+} from "@solana/spl-token";
 import CodeDisplay from "@/components/CodeDisplay";
 
 import { initPoseidon } from "@/lib/crypto";
@@ -17,6 +23,15 @@ import {
   getTreasuryPDA,
   PROGRAM_ID,
 } from "@/lib/vault";
+import {
+  DEVNET_USDC_MINT,
+  USDC_DECIMALS,
+  USDC_MIN_DEPOSIT,
+  USDC_MAX_DEPOSIT,
+  getMerkleTreeSplPDA,
+  getVaultPDA as getSplVaultPDA,
+  buildCreateDropSplIx,
+} from "@/lib/vault-spl";
 import { encodeClaimCode } from "@/lib/claim-code";
 import { snapshotTreeAccount } from "@/lib/merkle";
 import { RELAYER_URL, checkRelayerHealth } from "@/lib/relayer";
@@ -35,11 +50,49 @@ import { randomFieldElement, bigintToBytes32BE } from "@/lib/crypto";
 
 type Stage = "input" | "confirming" | "done" | "error";
 type DepositMode = "direct" | "private" | "pool";
+type Asset = "sol" | "usdc";
 
 // sha256("global:create_drop")[0..8]
 const CREATE_DROP_DISCRIMINATOR = new Uint8Array([157, 142, 145, 247, 92, 73, 59, 48]);
 
 const MIN_SOL = 0.00001; // 10,000 lamports
+
+/**
+ * Parse a decimal USDC amount string into 6-decimal base units (BigInt).
+ *
+ * FP arithmetic is unsafe here: `parseFloat("0.1") * 1e6` rounds to
+ * 100000.00000000001, and `Math.round(parseFloat("123456.789012") * 1e6)`
+ * loses precision past ~15 significant digits. A string-based split is
+ * exact for any input with ≤ 6 fractional digits, which is the only
+ * input class the UI accepts.
+ *
+ * Returns base units as BigInt. Throws on invalid input or > 6 decimals.
+ * Accepts `.` or `,` as separator (some locales auto-comma); coerces to `.`.
+ */
+function parseUsdcAmount(input: string): bigint {
+  const normalized = input.trim().replace(",", ".");
+  if (!/^\d*\.?\d*$/.test(normalized) || normalized === "" || normalized === ".") {
+    throw new Error("Invalid USDC amount");
+  }
+  const [whole, frac = ""] = normalized.split(".");
+  if (frac.length > USDC_DECIMALS) {
+    throw new Error(`USDC supports at most ${USDC_DECIMALS} decimals`);
+  }
+  const padded = (frac + "0".repeat(USDC_DECIMALS)).slice(0, USDC_DECIMALS);
+  // Drop leading zeros from whole to keep BigInt happy on "00.5" style input.
+  const wholePart = whole === "" ? "0" : whole;
+  return BigInt(wholePart) * 10n ** BigInt(USDC_DECIMALS) + BigInt(padded);
+}
+
+/** Format a USDC base-unit amount as a human string. Trims trailing zeros. */
+function formatUsdc(baseUnits: bigint): string {
+  const denom = 10n ** BigInt(USDC_DECIMALS);
+  const whole = baseUnits / denom;
+  const frac = baseUnits % denom;
+  if (frac === 0n) return whole.toString();
+  const fracStr = frac.toString().padStart(USDC_DECIMALS, "0").replace(/0+$/, "");
+  return fracStr ? `${whole.toString()}.${fracStr}` : whole.toString();
+}
 
 export default function CreateDropPage() {
   const { publicKey, sendTransaction } = useWallet();
@@ -47,6 +100,7 @@ export default function CreateDropPage() {
 
   const [amount, setAmount] = useState("");
   const [password, setPassword] = useState("");
+  const [asset, setAsset] = useState<Asset>("sol");
   const [depositMode, setDepositMode] = useState<DepositMode>("direct");
   const [enableRevoke, setEnableRevoke] = useState(false);
   const [stage, setStage] = useState<Stage>("input");
@@ -55,13 +109,224 @@ export default function CreateDropPage() {
   const [txSig, setTxSig] = useState("");
   const [receiptSaved, setReceiptSaved] = useState(false);
   const [relayerOnline, setRelayerOnline] = useState<boolean | null>(null);
+  // USDC ATA state — null means "not yet probed" / no wallet; bigint amount
+  // is the on-chain balance in base units. `ataExists=false` means probed
+  // and missing (user has never received USDC on this wallet).
+  const [usdcBalance, setUsdcBalance] = useState<bigint | null>(null);
+  const [usdcAtaExists, setUsdcAtaExists] = useState<boolean | null>(null);
 
   useEffect(() => {
     checkRelayerHealth().then((online) => {
       setRelayerOnline(online);
+      // Auto-select default deposit mode for SOL only. USDC always forces
+      // "direct" because relayer-fronted SPL deposits / SPL pool are not
+      // shipped yet.
       setDepositMode(online ? "private" : "direct");
     });
   }, []);
+
+  // Whenever asset flips to USDC (or the connected wallet changes), refresh
+  // the USDC ATA state. Asset==="sol" leaves the state alone — cheap to keep.
+  useEffect(() => {
+    if (asset !== "usdc" || !publicKey) {
+      setUsdcBalance(null);
+      setUsdcAtaExists(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const ata = getAssociatedTokenAddressSync(DEVNET_USDC_MINT, publicKey);
+        const acct = await getAccount(connection, ata, "confirmed");
+        if (cancelled) return;
+        setUsdcAtaExists(true);
+        setUsdcBalance(acct.amount);
+      } catch (err) {
+        if (cancelled) return;
+        if (
+          err instanceof TokenAccountNotFoundError ||
+          err instanceof TokenInvalidAccountOwnerError
+        ) {
+          setUsdcAtaExists(false);
+          setUsdcBalance(0n);
+        } else {
+          // Network blip — leave state as "unknown" so we don't surface a
+          // misleading "no USDC" message; the deposit handler will re-probe.
+          setUsdcAtaExists(null);
+          setUsdcBalance(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [asset, publicKey, connection]);
+
+  // Asset-flip side effects: USDC mode is direct-only with no revoke. Flip
+  // both back/off when user switches modes so leftover UI selections never
+  // produce a bad submit.
+  useEffect(() => {
+    if (asset === "usdc") {
+      setDepositMode("direct");
+      setEnableRevoke(false);
+    } else if (asset === "sol") {
+      // Restore relayer-aware default if relayer is up.
+      setDepositMode(relayerOnline ? "private" : "direct");
+    }
+  }, [asset, relayerOnline]);
+
+  /**
+   * USDC deposit path. Separate from the SOL handler so the SOL code path
+   * stays byte-identical to its pre-USDC form — no shared mutation, no
+   * shared early-return logic. Only DIRECT mode (user-signed); private/pool
+   * SPL deposits are not shipped yet, and revoke is SOL-only on-chain.
+   */
+  const handleCreateDropUsdc = async () => {
+    if (!publicKey || !sendTransaction) return;
+
+    if (usdcAtaExists === false) {
+      setError(
+        "You don't have any USDC. Get devnet USDC from https://faucet.circle.com/"
+      );
+      return;
+    }
+
+    let baseUnits: bigint;
+    try {
+      baseUnits = parseUsdcAmount(amount);
+    } catch (e: any) {
+      setError(e.message || "Invalid USDC amount");
+      return;
+    }
+    if (baseUnits <= 0n) {
+      setError("Enter a valid USDC amount");
+      return;
+    }
+    if (baseUnits < USDC_MIN_DEPOSIT) {
+      setError(`Minimum deposit: ${formatUsdc(USDC_MIN_DEPOSIT)} USDC`);
+      return;
+    }
+    if (baseUnits > USDC_MAX_DEPOSIT) {
+      setError(`Maximum deposit: ${formatUsdc(USDC_MAX_DEPOSIT)} USDC`);
+      return;
+    }
+    if (usdcBalance !== null && baseUnits > usdcBalance) {
+      setError(`Insufficient USDC balance: have ${formatUsdc(usdcBalance)} USDC`);
+      return;
+    }
+
+    setStage("confirming");
+    setError("");
+    setReceiptSaved(false);
+
+    try {
+      await initPoseidon();
+
+      const pwdBigint = password
+        ? BigInt(
+            "0x" +
+              Array.from(new TextEncoder().encode(password))
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("")
+          )
+        : undefined;
+
+      const dropResult = prepareCreateDrop(baseUnits, pwdBigint);
+
+      const userAta = getAssociatedTokenAddressSync(DEVNET_USDC_MINT, publicKey);
+      const splDepositIx = buildCreateDropSplIx({
+        user: publicKey,
+        userAta,
+        mint: DEVNET_USDC_MINT,
+        leaf: dropResult.leaf,
+        amount: baseUnits,
+      });
+
+      const tx = new Transaction().add(splDepositIx);
+      const sig = await sendWithRetry({
+        wallet: { sendTransaction },
+        connection,
+        transaction: tx,
+      });
+
+      // Snapshot the per-mint SPL tree post-deposit. The `MerkleTreeSpl`
+      // struct differs from the SOL `MerkleTreeAccount` by an extra `mint`
+      // pubkey after `vault`, so byte offsets shift by 32 and the lib helper
+      // `snapshotTreeAccount` (which expects SOL layout) cannot be reused.
+      // We build the same 672-byte snapshot blob (root + 20 filled_subtrees)
+      // here so the claim page's `decodeTreeSnapshot` + `buildProofFromSnapshot`
+      // work unchanged — they only care about the blob shape, not the
+      // source-account layout.
+      //
+      // MerkleTreeSpl layout:
+      //   8 (disc) + 32 (vault) + 32 (mint) + 4 (next_index)
+      //   + 4 (root_history_index) + 32 (current_root)
+      //   + 32*256 (root_history) + 32*20 (filled_subtrees)
+      const SPL_NEXT_INDEX_OFFSET = 72;
+      const SPL_ROOT_OFFSET = 80;
+      const SPL_FILLED_SUBTREES_OFFSET = 8304;
+      const MERKLE_DEPTH = 20;
+
+      const [splTreePda] = getMerkleTreeSplPDA(DEVNET_USDC_MINT);
+      const treeAccount = await connection.getAccountInfo(splTreePda);
+      if (!treeAccount) throw new Error("SPL merkle tree account not found");
+
+      const td = treeAccount.data;
+      const nextIndex = new DataView(
+        td.buffer,
+        td.byteOffset,
+        td.byteLength
+      ).getUint32(SPL_NEXT_INDEX_OFFSET, true);
+      const leafIndex = nextIndex - 1;
+
+      const snapBuf = new Uint8Array(32 + MERKLE_DEPTH * 32);
+      snapBuf.set(
+        td.subarray(SPL_ROOT_OFFSET, SPL_ROOT_OFFSET + 32),
+        0
+      );
+      for (let i = 0; i < MERKLE_DEPTH; i++) {
+        snapBuf.set(
+          td.subarray(
+            SPL_FILLED_SUBTREES_OFFSET + i * 32,
+            SPL_FILLED_SUBTREES_OFFSET + (i + 1) * 32
+          ),
+          32 + i * 32
+        );
+      }
+      let bin = "";
+      for (let i = 0; i < snapBuf.length; i++) {
+        bin += String.fromCharCode(snapBuf[i]);
+      }
+      const pathSnapshot = btoa(bin)
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+
+      const [splVault] = getSplVaultPDA();
+
+      const code = await encodeClaimCode(
+        {
+          ...dropResult.claimPayload,
+          leafIndex,
+          vaultAddress: splVault.toBase58(),
+          pathSnapshot,
+          flavor: "standard",
+          mint: DEVNET_USDC_MINT.toBase58(),
+        },
+        "devnet",
+        "usdc",
+        password || undefined
+      );
+
+      setClaimCode(code);
+      setTxSig(sig);
+      setStage("done");
+    } catch (err: any) {
+      console.error("Create USDC drop failed:", err.message);
+      setError(err.message || "Transaction failed");
+      setStage("error");
+    }
+  };
 
   const handleCreateDrop = async () => {
     if (!publicKey || !sendTransaction) return;
@@ -316,7 +581,7 @@ export default function CreateDropPage() {
           Create a<br />dead drop.
         </h1>
         <p className="mt-3 text-xs leading-relaxed text-[rgba(224,224,224,0.45)]">
-          Deposit SOL into the Merkle vault. You will receive a claim code to share with anyone.
+          Deposit SOL or USDC into the Merkle vault. You will receive a claim code to share with anyone.
         </p>
       </div>
 
@@ -332,23 +597,90 @@ export default function CreateDropPage() {
 
             {publicKey && (
               <>
-                {/* Amount field */}
+                {/* Asset selector */}
                 <div className="arcade-panel">
                   <div className="arcade-panel-header">
                     <span className="arcade-dot" />
-                    <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">AMOUNT (SOL)</span>
+                    <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">ASSET</span>
+                  </div>
+                  <div className="arcade-panel-body flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAsset("sol");
+                        setAmount("");
+                        setError("");
+                      }}
+                      className={`flex-1 border-2 py-3 text-center transition-all !shadow-none ${
+                        asset === "sol"
+                          ? "border-[var(--accent-dim)] bg-[rgba(0,255,65,0.04)]"
+                          : "border-[var(--border-dim)] hover:border-[var(--border)]"
+                      }`}
+                    >
+                      <span className={`font-mono text-[11px] tracking-[0.14em] font-semibold ${
+                        asset === "sol" ? "text-[var(--accent)]" : "text-[rgba(224,224,224,0.5)]"
+                      }`}>SOL</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAsset("usdc");
+                        setAmount("");
+                        setError("");
+                      }}
+                      className={`flex-1 border-2 py-3 text-center transition-all !shadow-none ${
+                        asset === "usdc"
+                          ? "border-[var(--accent-dim)] bg-[rgba(0,255,65,0.04)]"
+                          : "border-[var(--border-dim)] hover:border-[var(--border)]"
+                      }`}
+                    >
+                      <span className={`font-mono text-[11px] tracking-[0.14em] font-semibold ${
+                        asset === "usdc" ? "text-[var(--accent)]" : "text-[rgba(224,224,224,0.5)]"
+                      }`}>USDC</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Amount field */}
+                <div className="arcade-panel">
+                  <div className="arcade-panel-header justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="arcade-dot" />
+                      <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">
+                        AMOUNT ({asset === "usdc" ? "USDC" : "SOL"})
+                      </span>
+                    </div>
+                    {asset === "usdc" && usdcAtaExists !== null && (
+                      <span className="font-mono text-[8px] tracking-[0.12em] text-[rgba(224,224,224,0.4)]">
+                        BALANCE: {usdcBalance !== null ? formatUsdc(usdcBalance) : "—"} USDC
+                      </span>
+                    )}
                   </div>
                   <div className="arcade-panel-body">
                     <input
                       type="number"
-                      step="0.001"
-                      min={MIN_SOL}
-                      max="100"
+                      step={asset === "usdc" ? "0.01" : "0.001"}
+                      min={asset === "usdc" ? "0.01" : MIN_SOL}
+                      max={asset === "usdc" ? "100000" : "100"}
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       placeholder="0.00"
                       className="w-full text-[var(--accent)] text-lg font-mono"
                     />
+                    {asset === "usdc" && usdcAtaExists === false && (
+                      <p className="mt-2 text-[10px] leading-relaxed text-[rgba(255,200,0,0.7)]">
+                        You don't have any USDC. Get devnet USDC from{" "}
+                        <a
+                          href="https://faucet.circle.com/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline text-[var(--accent)]"
+                        >
+                          faucet.circle.com
+                        </a>
+                        .
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -372,6 +704,11 @@ export default function CreateDropPage() {
                   </div>
                 </div>
 
+                {/* SOL-only deposit-method + revoke panels. USDC ships with
+                    direct mode only (no relayer-fronted SPL deposits / SPL pool
+                    on-chain) and no revoke (revoke_drop_spl doesn't exist). */}
+                {asset === "sol" && (
+                <>
                 {/* Deposit mode */}
                 <div className="arcade-panel">
                   <div className="arcade-panel-header justify-between">
@@ -524,6 +861,8 @@ export default function CreateDropPage() {
                     </button>
                   </div>
                 </div>
+                </>
+                )}
 
                 {error && (
                   <div className="border-2 border-[rgba(255,0,68,0.3)] bg-[rgba(255,0,68,0.04)] px-5 py-3 shadow-[2px_2px_0_rgba(255,0,68,0.2)]">
@@ -532,11 +871,19 @@ export default function CreateDropPage() {
                 )}
 
                 <button
-                  onClick={handleCreateDrop}
-                  disabled={!amount}
+                  onClick={asset === "usdc" ? handleCreateDropUsdc : handleCreateDrop}
+                  disabled={!amount || (asset === "usdc" && usdcAtaExists === false)}
                   className="arcade-btn-primary w-full py-3.5 font-mono text-[10px] tracking-[0.2em]"
                 >
-                  {depositMode === "pool" ? "MAX PRIVACY DEPOSIT" : depositMode === "private" ? "PRIVATE DEPOSIT" : enableRevoke ? "CREATE DROP + RECEIPT" : "CREATE DROP"}
+                  {asset === "usdc"
+                    ? "CREATE USDC DROP"
+                    : depositMode === "pool"
+                    ? "MAX PRIVACY DEPOSIT"
+                    : depositMode === "private"
+                    ? "PRIVATE DEPOSIT"
+                    : enableRevoke
+                    ? "CREATE DROP + RECEIPT"
+                    : "CREATE DROP"}
                 </button>
               </>
             )}
@@ -560,7 +907,7 @@ export default function CreateDropPage() {
                 <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(0,255,65,0.6)]">DROP CREATED</span>
               </div>
               <div className="arcade-panel-body text-center">
-                <p className="text-sm text-[rgba(224,224,224,0.5)]">{amount} SOL deposited to vault</p>
+                <p className="text-sm text-[rgba(224,224,224,0.5)]">{amount} {asset === "usdc" ? "USDC" : "SOL"} deposited to vault</p>
               </div>
             </div>
 

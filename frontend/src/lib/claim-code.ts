@@ -41,6 +41,12 @@ export interface ClaimCodePayload {
   // "pool" = note pool layer: claim_from_note_pool → withdraw_credit.
   // The claim page dispatches on this field.
   flavor?: "standard" | "pool";
+  // SPL mint pubkey (base58). REQUIRED when asset === "usdc" so the claim
+  // page can derive per-mint PDAs (mint_config, merkle_tree_spl, mint_vault,
+  // credit_spl, nullifier_spl). MUST be absent for asset === "sol" — the
+  // encoder drops it silently to keep SOL codes byte-identical to pre-USDC
+  // codes. Serialized as the "m" key in the JSON payload.
+  mint?: string;
 }
 
 export interface ClaimCode {
@@ -61,6 +67,15 @@ export async function encodeClaimCode(
   asset: Asset = "sol",
   password?: string
 ): Promise<string> {
+  // SPL codes carry the mint pubkey so the claim page can derive per-mint
+  // PDAs. SOL codes never carry it — silently drop it so a mis-passed mint
+  // never leaks into a SOL claim code.
+  if (asset === "usdc" && !payload.mint) {
+    throw new Error(
+      "encodeClaimCode: payload.mint is required when asset is 'usdc'"
+    );
+  }
+
   const jsonPayload = JSON.stringify({
     s: bigintToBase58(payload.secret),
     n: bigintToBase58(payload.nullifier),
@@ -70,6 +85,7 @@ export async function encodeClaimCode(
     v: payload.vaultAddress,
     ...(payload.pathSnapshot ? { p: payload.pathSnapshot } : {}),
     ...(payload.flavor && payload.flavor !== "standard" ? { f: payload.flavor } : {}),
+    ...(asset === "usdc" && payload.mint ? { m: payload.mint } : {}),
   });
 
   if (password) {
@@ -137,6 +153,9 @@ export async function decodeClaimCode(
       vaultAddress: parsed.v,
       pathSnapshot: parsed.p,
       flavor: parsed.f === "pool" ? "pool" : "standard",
+      // Absent on pre-USDC SOL codes — `mint` stays undefined and callers
+      // branch on `asset` to decide whether mint is required.
+      mint: typeof parsed.m === "string" ? parsed.m : undefined,
     },
   };
 }

@@ -9,6 +9,13 @@ import {
   SystemProgram,
   PublicKey,
 } from "@solana/web3.js";
+import {
+  getAssociatedTokenAddressSync,
+  getAccount,
+  createAssociatedTokenAccountInstruction,
+  TokenAccountNotFoundError,
+  TokenInvalidAccountOwnerError,
+} from "@solana/spl-token";
 import ProofProgress from "@/components/ProofProgress";
 
 import {
@@ -60,6 +67,24 @@ const MERKLE_DEPTH = 20;
 const CLAIM_CREDIT_DISCRIMINATOR = new Uint8Array([190, 242, 172, 79, 29, 82, 22, 163]);
 const WITHDRAW_CREDIT_DISCRIMINATOR = new Uint8Array([8, 173, 134, 129, 40, 255, 134, 30]);
 
+const USDC_DECIMALS = 6;
+
+/**
+ * Format a USDC base-unit BigInt as a human string. Trims trailing zeros
+ * and the trailing decimal point — "5000000n" → "5", "4975000n" → "4.975".
+ */
+function formatUsdcAmount(baseUnits: bigint): string {
+  const denom = 10n ** BigInt(USDC_DECIMALS);
+  const whole = baseUnits / denom;
+  const frac = baseUnits % denom;
+  if (frac === 0n) return whole.toString();
+  const fracStr = frac
+    .toString()
+    .padStart(USDC_DECIMALS, "0")
+    .replace(/0+$/, "");
+  return fracStr ? `${whole.toString()}.${fracStr}` : whole.toString();
+}
+
 export default function ClaimPage() {
   const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
@@ -73,7 +98,26 @@ export default function ClaimPage() {
   const [withdrawTxSig, setWithdrawTxSig] = useState("");
   const [claimedAmount, setClaimedAmount] = useState("");
   const [feeAmount, setFeeAmount] = useState("");
+  // Asset label for the success display — "SOL" by default to preserve the
+  // pre-USDC text. Set per-claim from `decoded.asset`.
+  const [claimedAssetLabel, setClaimedAssetLabel] = useState<"SOL" | "USDC">("SOL");
+  // When a USDC claim is blocked because the recipient ATA doesn't exist,
+  // we stash the mint + derived ATA here so the error panel can show a
+  // user-signed "create token account" button.
+  const [needsAtaCreation, setNeedsAtaCreation] = useState<
+    { mint: PublicKey; ata: PublicKey } | null
+  >(null);
+  const [creatingAta, setCreatingAta] = useState(false);
   const [relayerOnline, setRelayerOnline] = useState<boolean | null>(null);
+
+  // Lightweight pre-decode of the claim-code prefix so the UI can react to
+  // asset ("usdc" disables direct mode) before the user actually submits.
+  // Does NOT verify the encoded payload — just splits the URI prefix.
+  const codeAsset: "sol" | "usdc" | null = (() => {
+    if (!claimCode.startsWith("darkdrop:v4:")) return null;
+    const slot = claimCode.split(":")[3];
+    return slot === "usdc" ? "usdc" : "sol";
+  })();
 
   useEffect(() => {
     checkRelayerHealth().then((online) => {
@@ -81,6 +125,213 @@ export default function ClaimPage() {
       setClaimMode(online ? "relayer" : "direct");
     });
   }, []);
+
+  // USDC v1 ships relayer-only — direct mode would require client-side SPL
+  // ix construction (claim_credit_spl + withdraw_credit_spl) plus the user
+  // having a payer ATA, neither of which is implemented yet. Force relayer
+  // mode whenever the pasted code parses as USDC.
+  useEffect(() => {
+    if (codeAsset === "usdc" && claimMode !== "relayer") {
+      setClaimMode("relayer");
+    }
+  }, [codeAsset, claimMode]);
+
+  /**
+   * Create the recipient ATA for `mint`, signed by the connected wallet.
+   * Called from the error-state "Create token account" button after a USDC
+   * claim is blocked by a missing ATA. After success, calls handleClaim()
+   * again to resume the claim from scratch — proof gen is fast enough that
+   * a re-run is simpler than threading state to skip the early steps.
+   */
+  const handleCreateRecipientAta = async () => {
+    if (!publicKey || !sendTransaction || !needsAtaCreation) return;
+    setCreatingAta(true);
+    setError("");
+    try {
+      const ix = createAssociatedTokenAccountInstruction(
+        publicKey, // payer
+        needsAtaCreation.ata,
+        publicKey, // owner
+        needsAtaCreation.mint
+      );
+      const tx = new Transaction().add(ix);
+      await sendWithRetry({
+        wallet: { sendTransaction },
+        connection,
+        transaction: tx,
+      });
+      setNeedsAtaCreation(null);
+      setCreatingAta(false);
+      // Resume the claim flow — proof gen re-runs but the ATA is now there.
+      handleClaim();
+    } catch (e: any) {
+      console.error("Create ATA failed:", e?.message || e);
+      setError(e?.message || "Failed to create token account");
+      setCreatingAta(false);
+    }
+  };
+
+  /**
+   * USDC claim path. Kept as a sibling function — `handleClaim` dispatches
+   * here right after decoding when `decoded.asset === "usdc"`. The SOL code
+   * path stays byte-identical to its pre-USDC form. USDC v1 ships
+   * relayer-only (gasless); direct mode is gated upstream by a useEffect.
+   *
+   * Snapshot format: the SPL create-drop page emits the SAME 672-byte blob
+   * format (root(32) || filled_subtrees[20*32]) that `decodeTreeSnapshot`
+   * consumes — verified during the prior `parseUsdcAmount` task. So the
+   * existing snapshot decode + proof builder work unchanged for SPL.
+   */
+  const handleClaimUsdc = async (
+    decoded: Awaited<ReturnType<typeof decodeClaimCode>>,
+    pwdBigint: bigint
+  ) => {
+    if (!publicKey) {
+      setError("Connect your wallet so the relayer knows where to send funds.");
+      setStage("error");
+      return;
+    }
+    if (claimMode !== "relayer") {
+      setError("Direct mode for USDC isn't available yet — please use Gasless.");
+      setStage("error");
+      return;
+    }
+
+    const mintStr = decoded.payload.mint;
+    if (!mintStr) {
+      setError("This USDC claim code is missing the mint field.");
+      setStage("error");
+      return;
+    }
+    const mint = new PublicKey(mintStr);
+
+    // ATA pre-check. Cheap RPC, runs before the slow proof-gen so we don't
+    // burn the user's time on a claim they can't finish.
+    const recipientAta = getAssociatedTokenAddressSync(mint, publicKey);
+    try {
+      await getAccount(connection, recipientAta, "confirmed");
+    } catch (e) {
+      if (
+        e instanceof TokenAccountNotFoundError ||
+        e instanceof TokenInvalidAccountOwnerError
+      ) {
+        setNeedsAtaCreation({ mint, ata: recipientAta });
+        setError(
+          "You need a USDC token account before claiming. Creating one is a one-time ~0.002 SOL action."
+        );
+        setStage("error");
+        return;
+      }
+      throw e;
+    }
+
+    const { secret, nullifier, amount, blindingFactor, leafIndex, pathSnapshot } =
+      decoded.payload;
+
+    setStage("merkle");
+    if (!pathSnapshot) {
+      throw new Error("USDC claim code missing pathSnapshot");
+    }
+    const snap = decodeTreeSnapshot(pathSnapshot);
+    const merkleProofObj = buildProofFromSnapshot(snap, leafIndex);
+
+    setStage("proving");
+    const nullHash = computeNullifierHash(nullifier);
+    const amtCommitment = computeAmountCommitment(amount, blindingFactor);
+    const pwdHash = computePasswordHash(pwdBigint);
+
+    const v2Result = await generateClaimProofV2(
+      { secret, nullifier, amount, blindingFactor, password: pwdBigint },
+      merkleProofObj,
+      publicKey,
+      nullHash,
+      amtCommitment,
+      pwdHash
+    );
+
+    const nullifierHashBytes = bigintToBytes32BE(nullHash);
+    const onChainRoot = bigintToBytes32BE(merkleProofObj.root);
+
+    // 96-byte opaque inputs: merkle_root || amount_commitment || password_hash
+    const inputs = new Uint8Array(96);
+    inputs.set(onChainRoot, 0);
+    inputs.set(v2Result.amountCommitment, 32);
+    inputs.set(v2Result.passwordHash, 64);
+
+    // Random salt, reduced mod Fr — Poseidon panics on out-of-range field
+    // elements, matching the SOL path's salt construction.
+    const BN254_FR =
+      21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+    const saltRaw = crypto.getRandomValues(new Uint8Array(32));
+    const saltReduced = bytes32BEToBigint(saltRaw) % BN254_FR;
+    const saltBytes = bigintToBytes32BE(saltReduced);
+
+    setStage("claiming");
+    const claimResp = await fetch(`${RELAYER_URL}/api/relay/credit-spl/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mint: mint.toBase58(),
+        proof: {
+          proofA: Array.from(v2Result.proofA),
+          proofB: Array.from(v2Result.proofB),
+          proofC: Array.from(v2Result.proofC),
+        },
+        nullifierHash: Array.from(nullifierHashBytes),
+        recipient: publicKey.toBase58(),
+        inputs: Array.from(inputs),
+        salt: Array.from(saltBytes),
+      }),
+    });
+    const claimResult = await claimResp.json();
+    if (!claimResp.ok) throw new Error(claimResult.error || "Relayer rejected claim");
+
+    setStage("withdrawing");
+    // Opening: amount(u64 LE, 8) || blinding(32) || salt(32)
+    const opening = new Uint8Array(72);
+    new DataView(opening.buffer).setBigUint64(0, amount, true);
+    opening.set(bigintToBytes32BE(blindingFactor), 8);
+    opening.set(saltBytes, 40);
+
+    const withdrawResp = await fetch(
+      `${RELAYER_URL}/api/relay/credit-spl/withdraw`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mint: mint.toBase58(),
+          nullifierHash: Array.from(nullifierHashBytes),
+          opening: Array.from(opening),
+          recipient: publicKey.toBase58(),
+        }),
+      }
+    );
+    const withdrawResult = await withdrawResp.json();
+    if (!withdrawResp.ok) {
+      // Race: the ATA was missing when the relayer evaluated. Surface a
+      // recoverable error so the user can hit "create token account" and
+      // retry — this is what the relayer 400 contract specifically signals.
+      if (
+        withdrawResp.status === 400 &&
+        /Recipient ATA/i.test(withdrawResult.error || "")
+      ) {
+        setNeedsAtaCreation({ mint, ata: recipientAta });
+      }
+      throw new Error(withdrawResult.error || "Relayer rejected withdraw");
+    }
+
+    const fee = (amount * BigInt(RELAYER_FEE_BPS)) / 10000n;
+    const net = amount - fee;
+    // USDC at 6 decimals — use BigInt-aware string format that drops
+    // trailing zeros. Number(...) / 1e6 is safe through 9 quadrillion base
+    // units, far past our 100k USDC cap.
+    setClaimedAmount(formatUsdcAmount(net));
+    setFeeAmount(formatUsdcAmount(fee));
+    setClaimedAssetLabel("USDC");
+    setClaimTxSig(claimResult.signature);
+    setWithdrawTxSig(withdrawResult.signature);
+    setStage("done");
+  };
 
   const handleClaim = async () => {
     if (claimMode === "direct" && (!publicKey || !sendTransaction)) {
@@ -119,6 +370,22 @@ export default function ClaimPage() {
         claimCode,
         (encryption === "aes" || encryption === "pbkdf2") ? password : undefined
       );
+
+      // USDC branch — fully separate handler so the SOL path below stays
+      // byte-identical. Pre-build pwdBigint (used by both branches) so the
+      // USDC handler doesn't duplicate the password encoding logic.
+      const pwdBigintShared = password
+        ? BigInt(
+            "0x" +
+              Array.from(new TextEncoder().encode(password))
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("")
+          )
+        : 0n;
+      if (decoded.asset === "usdc") {
+        return handleClaimUsdc(decoded, pwdBigintShared);
+      }
+
       const { secret, nullifier, amount, blindingFactor, leafIndex, pathSnapshot, flavor } =
         decoded.payload;
       const isPool = flavor === "pool";
@@ -313,6 +580,7 @@ export default function ClaimPage() {
         const net = amount - fee;
         setClaimedAmount((Number(net) / 1e9).toFixed(4));
         setFeeAmount((Number(fee) / 1e9).toFixed(4));
+        setClaimedAssetLabel("SOL");
         setClaimTxSig(claimResult.signature);
         setWithdrawTxSig(withdrawResult.signature);
       } else {
@@ -404,6 +672,7 @@ export default function ClaimPage() {
 
         setClaimedAmount(amountSol.toFixed(4));
         setFeeAmount("");
+        setClaimedAssetLabel("SOL");
         setClaimTxSig(sig1);
         setWithdrawTxSig(sig2);
       }
@@ -434,9 +703,16 @@ export default function ClaimPage() {
           <div className="space-y-4">
             {/* Claim code */}
             <div className="arcade-panel">
-              <div className="arcade-panel-header">
-                <span className="arcade-dot" />
-                <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">CLAIM CODE</span>
+              <div className="arcade-panel-header justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="arcade-dot" />
+                  <span className="font-mono text-[9px] tracking-[0.28em] text-[rgba(224,224,224,0.3)]">CLAIM CODE</span>
+                </div>
+                {codeAsset !== null && (
+                  <span className="font-mono text-[8px] tracking-[0.12em] text-[rgba(0,255,65,0.5)]">
+                    ASSET: {codeAsset === "usdc" ? "USDC" : "SOL"}
+                  </span>
+                )}
               </div>
               <div className="arcade-panel-body">
                 <textarea
@@ -512,12 +788,13 @@ export default function ClaimPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setClaimMode("direct")}
+                  onClick={() => codeAsset !== "usdc" && setClaimMode("direct")}
+                  disabled={codeAsset === "usdc"}
                   className={`flex w-full items-start gap-3 border-2 p-4 text-left transition-all !shadow-none ${
                     claimMode === "direct"
                       ? "border-[var(--accent-dim)] bg-[rgba(0,255,65,0.04)]"
                       : "border-[var(--border-dim)] hover:border-[var(--border)]"
-                  }`}
+                  } ${codeAsset === "usdc" ? "opacity-40 !cursor-not-allowed" : ""}`}
                 >
                   <span className={`mt-0.5 flex h-4 w-4 items-center justify-center border-2 ${
                     claimMode === "direct"
@@ -534,7 +811,9 @@ export default function ClaimPage() {
                       <span className="arcade-badge">PAY GAS</span>
                     </div>
                     <p className="mt-1 text-[10px] leading-relaxed text-[rgba(224,224,224,0.3)]">
-                      You pay gas directly. Your wallet appears as both payer and recipient.
+                      {codeAsset === "usdc"
+                        ? "Not yet available for USDC — use Gasless."
+                        : "You pay gas directly. Your wallet appears as both payer and recipient."}
                     </p>
                   </div>
                 </button>
@@ -552,6 +831,16 @@ export default function ClaimPage() {
             {error && (
               <div className="border-2 border-[rgba(255,0,68,0.3)] bg-[rgba(255,0,68,0.04)] px-5 py-3 shadow-[2px_2px_0_rgba(255,0,68,0.2)]">
                 <p className="text-xs text-[var(--danger)] font-semibold">{error}</p>
+                {needsAtaCreation && (
+                  <button
+                    type="button"
+                    onClick={handleCreateRecipientAta}
+                    disabled={creatingAta || !publicKey}
+                    className="arcade-btn-primary mt-3 w-full py-2.5 font-mono text-[10px] tracking-[0.2em]"
+                  >
+                    {creatingAta ? "CREATING TOKEN ACCOUNT…" : "CREATE USDC TOKEN ACCOUNT"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -572,12 +861,12 @@ export default function ClaimPage() {
               </div>
               <div className="arcade-panel-body text-center">
                 <p className="font-mono text-[clamp(28px,4vw,40px)] font-light text-[var(--accent)] mb-2">
-                  {claimedAmount} SOL
+                  {claimedAmount} {claimedAssetLabel}
                 </p>
                 <p className="text-xs text-[rgba(224,224,224,0.5)]">Successfully claimed</p>
                 {feeAmount && (
                   <p className="mt-1 text-[10px] text-[rgba(224,224,224,0.3)]">
-                    Relayer fee: {feeAmount} SOL
+                    Relayer fee: {feeAmount} {claimedAssetLabel}
                   </p>
                 )}
                 <div className="mt-4 space-y-1">
@@ -613,6 +902,7 @@ export default function ClaimPage() {
                 setClaimTxSig("");
                 setWithdrawTxSig("");
                 setFeeAmount("");
+                setNeedsAtaCreation(null);
               }}
               className="arcade-btn-ghost w-full py-3 font-mono text-[10px] tracking-[0.15em]"
             >

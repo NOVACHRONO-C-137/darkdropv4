@@ -184,4 +184,112 @@ pub mod darkdrop {
     ) -> Result<()> {
         instructions::create_drop_to_pool::handle_create_drop_to_pool(ctx, amount, pool_params)
     }
+
+    /// Register a new SPL mint with the program. Smallest viable surface:
+    /// creates the `MintConfig` PDA only; trees and mint vault are set up
+    /// by a later instruction. Authority-gated via Vault.has_one.
+    pub fn initialize_mint_config(ctx: Context<InitializeMintConfig>) -> Result<()> {
+        instructions::initialize_mint_config::handle_initialize_mint_config(ctx)
+    }
+
+    /// Initialize the per-mint main Merkle tree and note pool tree.
+    /// Mint must already be registered via `initialize_mint_config`.
+    /// Authority-gated via Vault.has_one.
+    pub fn initialize_mint_trees(ctx: Context<InitializeMintTrees>) -> Result<()> {
+        instructions::initialize_mint_trees::handle_initialize_mint_trees(ctx)
+    }
+
+    /// Create the program-owned SPL token account that holds custody for
+    /// this mint. Trees must already be initialized. Authority-gated.
+    pub fn initialize_mint_vault(ctx: Context<InitializeMintVault>) -> Result<()> {
+        instructions::initialize_mint_vault::handle_initialize_mint_vault(ctx)
+    }
+
+    /// SPL parallel of `create_drop`. Accepts an SPL token deposit into
+    /// the program-owned mint vault and inserts the leaf into the per-mint
+    /// Merkle tree. User-facing.
+    pub fn create_drop_spl(
+        ctx: Context<CreateDropSpl>,
+        leaf: [u8; 32],
+        amount: u64,
+    ) -> Result<()> {
+        instructions::create_drop_spl::handle_create_drop_spl(ctx, leaf, amount)
+    }
+
+    /// SPL parallel of `claim_credit`. Verifies a V2 ZK proof, creates a
+    /// per-mint nullifier and a CreditNoteSpl with re-randomized
+    /// commitment. ZERO TOKEN MOVEMENT.
+    pub fn claim_credit_spl(
+        ctx: Context<ClaimCreditSpl>,
+        nullifier_hash: [u8; 32],
+        proof: ProofData,
+        inputs: Vec<u8>,
+        salt: [u8; 32],
+    ) -> Result<()> {
+        instructions::claim_credit_spl::handle_claim_credit_spl(
+            ctx, nullifier_hash, proof, inputs, salt,
+        )
+    }
+
+    /// SPL parallel of `withdraw_credit`. Opens the CreditNoteSpl
+    /// commitment, transfers tokens out of the mint vault, closes the
+    /// note. Supports the same `rate` basis-points fee model as the
+    /// SOL flow (≤ 500 bps), with the fee paid in source mint to payer.
+    pub fn withdraw_credit_spl(
+        ctx: Context<WithdrawCreditSpl>,
+        nullifier_hash: [u8; 32],
+        opening: Vec<u8>,
+        rate: u16,
+    ) -> Result<()> {
+        instructions::withdraw_credit_spl::handle_withdraw_credit_spl(
+            ctx, nullifier_hash, opening, rate,
+        )
+    }
+
+    /// Admin kill-switch for a registered mint. Flips
+    /// `MintConfig.paused`; subsequent `create_drop_spl` calls return
+    /// `MintPaused` while existing credit notes remain withdrawable.
+    pub fn pause_deposits(
+        ctx: Context<PauseDeposits>,
+        paused: bool,
+    ) -> Result<()> {
+        instructions::pause_deposits::handle_pause_deposits(ctx, paused)
+    }
+
+    /// SPL parallel of `admin_sweep`. Sweeps excess tokens out of the
+    /// mint vault to an admin-chosen destination ATA, never below the
+    /// user-owed floor (total_deposited - total_withdrawn).
+    pub fn admin_sweep_spl(
+        ctx: Context<AdminSweepSpl>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::admin_sweep_spl::handle_admin_sweep_spl(ctx, amount)
+    }
+
+    /// SPL parallel of `create_drop_to_pool`. One-TX deposit of SPL
+    /// tokens directly into the per-mint note pool layer. Skips the
+    /// main tree; the V3 claim path picks it up.
+    pub fn create_drop_to_pool_spl(
+        ctx: Context<CreateDropToPoolSpl>,
+        amount: u64,
+        pool_params: Vec<u8>,
+    ) -> Result<()> {
+        instructions::create_drop_to_pool_spl::handle_create_drop_to_pool_spl(
+            ctx, amount, pool_params,
+        )
+    }
+
+    /// SPL parallel of `claim_from_note_pool`. Verifies a V3 proof
+    /// against the per-mint pool tree, creates a per-mint pool
+    /// nullifier and a fresh CreditNoteSpl. ZERO TOKEN MOVEMENT.
+    pub fn claim_from_note_pool_spl(
+        ctx: Context<ClaimFromNotePoolSpl>,
+        pool_nullifier_hash: [u8; 32],
+        proof: ProofData,
+        inputs: Vec<u8>,
+    ) -> Result<()> {
+        instructions::claim_from_note_pool_spl::handle_claim_from_note_pool_spl(
+            ctx, pool_nullifier_hash, proof, inputs,
+        )
+    }
 }
