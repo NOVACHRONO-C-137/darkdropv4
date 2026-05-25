@@ -7,6 +7,17 @@ if (feeRateBps < 0 || feeRateBps > 500) {
   throw new Error(`FEE_RATE_BPS=${feeRateBps} out of bounds (0-500). Refusing to start.`);
 }
 
+// Solana caps compute units at 1,400,000 per TX. Anything outside [1, 1_400_000]
+// is either nonsense (NaN from a malformed env) or unsatisfiable. Fail fast at
+// startup rather than letting `setComputeUnitLimit({ units: NaN })` reach a TX.
+function parseCu(name: string, raw: string | undefined, fallback: string): number {
+  const parsed = parseInt(raw || fallback, 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 1_400_000) {
+    throw new Error(`${name}=${raw} is invalid (expected integer 1..1400000). Refusing to start.`);
+  }
+  return parsed;
+}
+
 export const config = {
   // Solana RPC
   rpcUrl: process.env.RPC_URL || "https://api.devnet.solana.com",
@@ -49,8 +60,8 @@ export const config = {
   // than V2/V3. Defaults match the previously hardcoded inline values.
   // Bump these via env if a runtime repricing or verifier upgrade pushes
   // cost over budget.
-  v1ClaimCu: parseInt(process.env.V1_CLAIM_CU || "200000", 10),
-  v2CreditClaimCu: parseInt(process.env.V2_CREDIT_CLAIM_CU || "400000", 10),
-  v2CreditSplClaimCu: parseInt(process.env.V2_CREDIT_SPL_CLAIM_CU || "400000", 10),
-  v3PoolClaimCu: parseInt(process.env.V3_POOL_CLAIM_CU || "400000", 10),
+  v1ClaimCu: parseCu("V1_CLAIM_CU", process.env.V1_CLAIM_CU, "200000"),
+  v2CreditClaimCu: parseCu("V2_CREDIT_CLAIM_CU", process.env.V2_CREDIT_CLAIM_CU, "400000"),
+  v2CreditSplClaimCu: parseCu("V2_CREDIT_SPL_CLAIM_CU", process.env.V2_CREDIT_SPL_CLAIM_CU, "400000"),
+  v3PoolClaimCu: parseCu("V3_POOL_CLAIM_CU", process.env.V3_POOL_CLAIM_CU, "400000"),
 };
