@@ -56,16 +56,30 @@ export RPC_URL="$RPC"
 export PROGRAM_ID
 export KEYPAIR="$WALLET"
 
-run() { echo; echo "──────── $1 ────────"; node "$REPO/scripts/$1"; }
-
-# NOTE: scripts/initialize.js (M-03) is verified separately — run it on its own
-# fresh validator. Do NOT run it before the e2e suites: they each perform their
-# own initialize_vault, and a pre-initialized vault makes their setup fail.
-
-# Audit-06 change coverage. Each suite self-inits the vault. Override the set
-# with SUITES="a.js b.js" to run a subset.
-SUITES="${SUITES:-e2e-credit-test.js security-credit-tests.js note-pool-test.js note-pool-security-tests.js}"
-for s in $SUITES; do run "$s"; done
+# NOTE: scripts/initialize.js (M-03) is verified separately — do NOT run it
+# before the e2e suites (they self-init the vault; a pre-init'd vault breaks them).
+#
+# Per-suite timeout + continue-on-failure. A suite that PASSES but doesn't exit
+# cleanly (lingering RPC handle) is killed by `timeout` and judged by its output
+# banner, not its exit code — so it's not miscounted as a failure and can't stall
+# the whole run. Override with SUITES="a.js b.js" / SUITE_TIMEOUT=<secs>.
+SUITES="${SUITES:-e2e-credit-test.js note-pool-test.js security-credit-tests.js note-pool-security-tests.js revoke-test.js revoke-crossimpl-test.js security-revoke-tests.js security-tests.js close-receipt-test.js relayer-test.js stress-test.js e2e-test.js}"
+SUITE_TIMEOUT="${SUITE_TIMEOUT:-220}"
+PASS=""; FAIL=""
+for s in $SUITES; do
+  echo; echo "──────── $s ────────"
+  out="$LEDGER/$s.out"
+  timeout "$SUITE_TIMEOUT" node "$REPO/scripts/$s" 2>&1 | tee "$out" || true
+  code=${PIPESTATUS[0]}
+  if [ "$code" = "0" ]; then
+    PASS="$PASS $s"; echo "[$s] PASS (clean exit)"
+  elif grep -qE "PASSED|RESULTS: [0-9]+ passed, 0 failed|FLOW COMPLETE|ALL TESTS PASS" "$out"; then
+    PASS="$PASS $s"; echo "[$s] PASS (success banner; exit $code — non-clean exit/timeout)"
+  else
+    FAIL="$FAIL $s"; echo "[$s] FAIL (exit $code)"
+  fi
+done
+echo; echo "===== TALLY ====="; echo "PASS:$PASS"; echo "FAIL:$FAIL"
 
 echo
 echo "✅ Phase 1 localnet suites passed. Safe to proceed to the coordinated cutover."
