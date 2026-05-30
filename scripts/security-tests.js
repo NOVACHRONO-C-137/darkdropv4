@@ -171,8 +171,7 @@ async function createDrop(connection, payer, amount) {
       createDiscriminator,
       bigintToBytes32BE(leaf),
       amountBuf,
-      bigintToBytes32BE(amtCommitment),
-      bigintToBytes32BE(0n), // no password
+      // Audit 06 L-01: amount_commitment / password_hash removed from create_drop
     ]),
   });
 
@@ -226,8 +225,7 @@ async function createDropWithPassword(connection, payer, amount, password) {
       createDiscriminator,
       bigintToBytes32BE(leaf),
       amountBuf,
-      bigintToBytes32BE(amtCommitment),
-      bigintToBytes32BE(pwdHash),
+      // Audit 06 L-01: amount_commitment / password_hash removed from create_drop
     ]),
   });
 

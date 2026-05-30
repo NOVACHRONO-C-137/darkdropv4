@@ -145,7 +145,8 @@ async function main() {
       { pubkey: payer.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    data: Buffer.concat([createDisc, bigintToBytes32BE(leaf), amtBuf, bigintToBytes32BE(amtCommitment), bigintToBytes32BE(0n)]),
+    // Audit 06 L-01: amount_commitment / password_hash removed from create_drop
+    data: Buffer.concat([createDisc, bigintToBytes32BE(leaf), amtBuf]),
   });
   await sendAndConfirmTransaction(connection, new Transaction().add(createIx), [payer]);
   console.log(`  Drop created at index ${leafIndex}`);

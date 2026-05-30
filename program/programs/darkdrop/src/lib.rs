@@ -27,10 +27,8 @@ pub mod darkdrop {
         ctx: Context<'_, '_, '_, 'info, CreateDrop<'info>>,
         leaf: [u8; 32],
         amount: u64,
-        amount_commitment: [u8; 32],
-        password_hash: [u8; 32],
     ) -> Result<()> {
-        instructions::create_drop::handle_create_drop(ctx, leaf, amount, amount_commitment, password_hash)
+        instructions::create_drop::handle_create_drop(ctx, leaf, amount)
     }
 
     /// Legacy claim: verify ZK proof (V1 circuit, 6 public inputs), release SOL directly.

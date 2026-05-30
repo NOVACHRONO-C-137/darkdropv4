@@ -450,10 +450,9 @@ export default function CreateDropPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            // Audit 06 L-01: create_drop no longer takes amount_commitment / password_hash.
             leaf: Array.from(dropResult.leaf),
             amount: lamports.toString(),
-            commitment: Array.from(dropResult.amountCommitment),
-            seed: Array.from(dropResult.passwordHash),
             depositTx: depositSig,
           }),
         });
@@ -465,13 +464,12 @@ export default function CreateDropPage() {
         const amountBuf = new Uint8Array(8);
         new DataView(amountBuf.buffer).setBigUint64(0, lamports, true);
 
-        const ixData = new Uint8Array(8 + 32 + 8 + 32 + 32);
+        // Audit 06 L-01: create_drop instruction data is now just leaf + amount.
+        const ixData = new Uint8Array(8 + 32 + 8);
         let offset = 0;
         ixData.set(CREATE_DROP_DISCRIMINATOR, offset); offset += 8;
         ixData.set(dropResult.leaf, offset); offset += 32;
-        ixData.set(amountBuf, offset); offset += 8;
-        ixData.set(dropResult.amountCommitment, offset); offset += 32;
-        ixData.set(dropResult.passwordHash, offset);
+        ixData.set(amountBuf, offset);
 
         const keys = [
           { pubkey: vault, isSigner: false, isWritable: true },

@@ -163,8 +163,7 @@ function buildCreateDropIx({ vault, merkleTree, treasury, payer, leaf, amount, a
     getDiscriminator("create_drop"),
     bigintToBytes32BE(leaf),
     amountBuf,
-    bigintToBytes32BE(amtCommitment),
-    bigintToBytes32BE(pwdHash),
+    // Audit 06 L-01: amount_commitment / password_hash removed from create_drop
   ]);
   return new TransactionInstruction({
     programId: PROGRAM_ID,

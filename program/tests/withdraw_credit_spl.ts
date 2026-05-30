@@ -308,6 +308,9 @@ describe("withdraw_credit_spl", function () {
       })
     ), [payer], { commitment: "confirmed" });
 
+    // Opening is 72 bytes (amount || blinding || salt). withdraw_credit_spl
+    // tries the on-chain credit.salt first and falls back to this caller salt
+    // (Audit 06 M-02).
     const opening = Buffer.concat([
       u64LE(amount),
       Buffer.from(bigintToBytes32BE(blinding)),

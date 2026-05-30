@@ -14,6 +14,10 @@ import { buildPoseidon } from "circomlibjs";
 // Verification keys loaded once at import time
 const VK_V1 = require("../../circuits/build/verification_key.json");
 const VK_V2 = require("../../circuits/build/verification_key_v2.json");
+// V3 (note pool) circuit. Audit 06 M-01: the pool-claim relay endpoint must
+// pre-verify V3 proofs off-chain to avoid a gas-drain DoS, just as the V2
+// credit endpoint does. This is the ceremony output for the note_pool circuit.
+const VK_V3 = require("../../circuits/build/note_pool/verification_key_note_pool.json");
 
 // BN254 base field modulus (Fq) — used to un-negate proof_a y-coordinate
 const BN254_FQ = 21888242871839275222246405745257275088696311157297823662689037894645226208583n;
@@ -180,4 +184,48 @@ export async function verifyClaimProofV2(
   const signals = publicInputs.map((v) => v.toString());
 
   return snarkjs.groth16.verify(VK_V2, signals, proof);
+}
+
+/**
+ * Verify a V3 claim_from_note_pool proof off-chain (Audit 06 M-01).
+ *
+ * Public-input order MUST match the on-chain verifier
+ * (claim_from_note_pool.rs):
+ *   [0] pool_merkle_root
+ *   [1] pool_nullifier_hash
+ *   [2] new_stored_commitment
+ *   [3] recipient_hash = Poseidon(pubkey_hi_128, pubkey_lo_128)
+ *
+ * @param poolMerkleRoot      32 bytes (inputs[0..32])
+ * @param poolNullifierHash   32 bytes
+ * @param newStoredCommitment 32 bytes (inputs[32..64])
+ * @param recipient           32-byte recipient pubkey
+ */
+export async function verifyClaimProofV3(
+  proofA: number[],
+  proofB: number[],
+  proofC: number[],
+  poolMerkleRoot: Uint8Array,
+  poolNullifierHash: Uint8Array,
+  newStoredCommitment: Uint8Array,
+  recipient: Uint8Array,
+): Promise<boolean> {
+  const proof = {
+    pi_a: g1NegFromBytes(Buffer.from(proofA)),
+    pi_b: g2FromBytes(Buffer.from(proofB)),
+    pi_c: g1FromBytes(Buffer.from(proofC)),
+    protocol: "groth16" as const,
+    curve: "bn128",
+  };
+
+  const recipientHash = await pubkeyToField(recipient);
+
+  const signals = [
+    bytesToBigIntBE(poolMerkleRoot),
+    bytesToBigIntBE(poolNullifierHash),
+    bytesToBigIntBE(newStoredCommitment),
+    recipientHash,
+  ].map((v) => v.toString());
+
+  return snarkjs.groth16.verify(VK_V3, signals, proof);
 }

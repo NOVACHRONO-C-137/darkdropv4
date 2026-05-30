@@ -69,7 +69,13 @@ pub enum DarkDropError {
     RotationTooEarly,
 
     // ─── SPL / multi-mint extension ──────────────────────────────────────────
-    #[msg("Mint is not registered with the program")]
+    /// Audit 06 M-04: the SPL extension is bound to LEGACY SPL Token only.
+    /// A Token-2022 mint does NOT surface this error — it fails earlier, at
+    /// Anchor account validation (`AccountOwnedByWrongProgram`/`ConstraintTokenMint`),
+    /// because `Account<'info, Mint>` rejects the Token-2022 owner/schema before
+    /// the handler runs. Token-2022 is intentionally unsupported; see
+    /// ARCHITECTURE.md §15 ("Token program binding / Token-2022 scope").
+    #[msg("Mint is not registered with the program (note: Token-2022 mints are not supported — see ARCHITECTURE.md §15)")]
     MintNotRegistered,
 
     #[msg("Mint is paused — new deposits disabled")]

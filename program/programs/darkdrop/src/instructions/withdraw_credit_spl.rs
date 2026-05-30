@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use crate::state::*;
 use crate::errors::DarkDropError;
-use crate::poseidon::poseidon_hash;
+use crate::poseidon::{poseidon_hash, u64_to_field_be};
 
 /// SPL parallel of `withdraw_credit` for SOL. Open the Poseidon
 /// commitment stored on a CreditNoteSpl, transfer SPL tokens from the
@@ -12,7 +12,10 @@ use crate::poseidon::poseidon_hash;
 /// Structurally mirrors `withdraw_credit.rs`. Same 72-byte opening
 /// layout, same nested-Poseidon re-randomization recompute, same
 /// `rate` basis-points fee model with 500 bps cap, same
-/// `close = payer` rent flow.
+/// `close = payer` rent flow. Like the SOL path, the salt is checked
+/// against the authoritative on-chain `credit_note_spl.salt` first and
+/// falls back to the caller-supplied salt for note-pool notes whose
+/// stored salt is a decoy (Audit 06 M-02 parity — see withdraw_credit.rs).
 ///
 /// Differences from SOL flow:
 ///   1. SPL `token::transfer` CPI instead of direct lamport manipulation.
@@ -31,7 +34,11 @@ use crate::poseidon::poseidon_hash;
 /// Opening byte layout (matches SOL):
 ///   [0..8]   amount (u64 little-endian)
 ///   [8..40]  blinding factor (32 bytes)
-///   [40..72] salt (32 bytes)
+///   [40..72] salt (32 bytes) — caller-supplied; fallback for pool notes
+///
+/// Salt handling mirrors withdraw_credit.rs (Audit 06 M-02): try the
+/// authoritative on-chain `credit_note_spl.salt` first, fall back to the
+/// caller-supplied salt for note-pool notes whose stored salt is a decoy.
 pub fn handle_withdraw_credit_spl(
     ctx: Context<WithdrawCreditSpl>,
     _nullifier_hash: [u8; 32],
@@ -42,19 +49,21 @@ pub fn handle_withdraw_credit_spl(
 
     let amount = u64::from_le_bytes(opening[0..8].try_into().unwrap());
     let blinding_factor: [u8; 32] = opening[8..40].try_into().unwrap();
-    let salt: [u8; 32] = opening[40..72].try_into().unwrap();
+    let caller_salt: [u8; 32] = opening[40..72].try_into().unwrap();
 
     let credit = &ctx.accounts.credit_note_spl;
 
-    // Recompute the re-randomized commitment:
-    //   original = Poseidon(amount, blinding_factor)
-    //   stored   = Poseidon(original, salt)
-    // Must match what claim_credit_spl wrote.
+    // Recompute the re-randomized commitment. Try authoritative credit.salt
+    // first, then the caller-supplied salt (pool-note decoy fallback).
+    // See withdraw_credit.rs for the full rationale (Audit 06 M-02).
     let amount_bytes = u64_to_field_be(amount);
     let original_commitment = poseidon_hash(&amount_bytes, &blinding_factor);
-    let computed_commitment = poseidon_hash(&original_commitment, &salt);
+    let matches_stored =
+        poseidon_hash(&original_commitment, &credit.salt) == credit.commitment;
+    let matches_caller =
+        poseidon_hash(&original_commitment, &caller_salt) == credit.commitment;
     require!(
-        computed_commitment == credit.commitment,
+        matches_stored || matches_caller,
         DarkDropError::CommitmentMismatch
     );
 
@@ -140,15 +149,6 @@ pub fn handle_withdraw_credit_spl(
     // user). No amount in instruction data, no amount in events.
 
     Ok(())
-}
-
-/// u64 → 32-byte big-endian field element. Same encoding as the
-/// private helper in `withdraw_credit.rs`; duplicated here for the
-/// same audited-code-isolation reason as in claim_credit_spl.
-fn u64_to_field_be(val: u64) -> [u8; 32] {
-    let mut bytes = [0u8; 32];
-    bytes[24..32].copy_from_slice(&val.to_be_bytes());
-    bytes
 }
 
 #[derive(Accounts)]

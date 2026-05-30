@@ -138,10 +138,26 @@ impl MerkleTreeAccount {
         if *root == self.current_root {
             return true;
         }
-        for i in 0..ROOT_HISTORY_SIZE {
-            if self.root_history[i] == *root {
+        // Audit 06 L-02: walk the circular buffer backward from the most recent
+        // write instead of scanning all ROOT_HISTORY_SIZE slots linearly.
+        // Unused slots hold the ZERO_HASHES sentinel; reaching one means we have
+        // scanned the entire filled region (newest -> oldest) and can stop. The
+        // buffer fills from index 1 (increment-then-write), so a forward "break
+        // on first sentinel" from index 0 would be incorrect — the backward walk
+        // from root_history_index is the correct shape. Real roots never equal
+        // the empty-tree sentinel, so this never skips a valid root. Worst case
+        // (fully wrapped buffer) is unchanged; early tree life is much cheaper.
+        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
+        let mut i = self.root_history_index as usize;
+        for _ in 0..ROOT_HISTORY_SIZE {
+            let candidate = self.root_history[i];
+            if candidate == sentinel {
+                break;
+            }
+            if candidate == *root {
                 return true;
             }
+            i = if i == 0 { ROOT_HISTORY_SIZE - 1 } else { i - 1 };
         }
         false
     }
@@ -259,10 +275,26 @@ impl NotePoolTree {
         if *root == self.current_root {
             return true;
         }
-        for i in 0..ROOT_HISTORY_SIZE {
-            if self.root_history[i] == *root {
+        // Audit 06 L-02: walk the circular buffer backward from the most recent
+        // write instead of scanning all ROOT_HISTORY_SIZE slots linearly.
+        // Unused slots hold the ZERO_HASHES sentinel; reaching one means we have
+        // scanned the entire filled region (newest -> oldest) and can stop. The
+        // buffer fills from index 1 (increment-then-write), so a forward "break
+        // on first sentinel" from index 0 would be incorrect — the backward walk
+        // from root_history_index is the correct shape. Real roots never equal
+        // the empty-tree sentinel, so this never skips a valid root. Worst case
+        // (fully wrapped buffer) is unchanged; early tree life is much cheaper.
+        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
+        let mut i = self.root_history_index as usize;
+        for _ in 0..ROOT_HISTORY_SIZE {
+            let candidate = self.root_history[i];
+            if candidate == sentinel {
+                break;
+            }
+            if candidate == *root {
                 return true;
             }
+            i = if i == 0 { ROOT_HISTORY_SIZE - 1 } else { i - 1 };
         }
         false
     }
@@ -429,10 +461,26 @@ impl MerkleTreeSpl {
         if *root == self.current_root {
             return true;
         }
-        for i in 0..ROOT_HISTORY_SIZE {
-            if self.root_history[i] == *root {
+        // Audit 06 L-02: walk the circular buffer backward from the most recent
+        // write instead of scanning all ROOT_HISTORY_SIZE slots linearly.
+        // Unused slots hold the ZERO_HASHES sentinel; reaching one means we have
+        // scanned the entire filled region (newest -> oldest) and can stop. The
+        // buffer fills from index 1 (increment-then-write), so a forward "break
+        // on first sentinel" from index 0 would be incorrect — the backward walk
+        // from root_history_index is the correct shape. Real roots never equal
+        // the empty-tree sentinel, so this never skips a valid root. Worst case
+        // (fully wrapped buffer) is unchanged; early tree life is much cheaper.
+        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
+        let mut i = self.root_history_index as usize;
+        for _ in 0..ROOT_HISTORY_SIZE {
+            let candidate = self.root_history[i];
+            if candidate == sentinel {
+                break;
+            }
+            if candidate == *root {
                 return true;
             }
+            i = if i == 0 { ROOT_HISTORY_SIZE - 1 } else { i - 1 };
         }
         false
     }
@@ -466,10 +514,26 @@ impl NotePoolTreeSpl {
         if *root == self.current_root {
             return true;
         }
-        for i in 0..ROOT_HISTORY_SIZE {
-            if self.root_history[i] == *root {
+        // Audit 06 L-02: walk the circular buffer backward from the most recent
+        // write instead of scanning all ROOT_HISTORY_SIZE slots linearly.
+        // Unused slots hold the ZERO_HASHES sentinel; reaching one means we have
+        // scanned the entire filled region (newest -> oldest) and can stop. The
+        // buffer fills from index 1 (increment-then-write), so a forward "break
+        // on first sentinel" from index 0 would be incorrect — the backward walk
+        // from root_history_index is the correct shape. Real roots never equal
+        // the empty-tree sentinel, so this never skips a valid root. Worst case
+        // (fully wrapped buffer) is unchanged; early tree life is much cheaper.
+        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
+        let mut i = self.root_history_index as usize;
+        for _ in 0..ROOT_HISTORY_SIZE {
+            let candidate = self.root_history[i];
+            if candidate == sentinel {
+                break;
+            }
+            if candidate == *root {
                 return true;
             }
+            i = if i == 0 { ROOT_HISTORY_SIZE - 1 } else { i - 1 };
         }
         false
     }

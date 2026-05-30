@@ -51,8 +51,6 @@ const CREATE_DROP_DISCRIMINATOR = Buffer.from([157, 142, 145, 247, 92, 73, 59, 4
 interface DepositRelayRequest {
   leaf: number[];           // 32 bytes
   amount: string;           // lamports as string
-  commitment: number[];     // 32 bytes (amount_commitment)
-  seed: number[];           // 32 bytes (password_hash)
   depositTx: string;        // signature of the SOL transfer TX from user to relayer
 }
 
@@ -61,13 +59,11 @@ router.post("/", async (req: Request, res: Response) => {
     const body = req.body as DepositRelayRequest;
 
     // Validate required fields
-    if (!body.leaf || !body.amount || !body.commitment || !body.seed || !body.depositTx) {
+    if (!body.leaf || !body.amount || !body.depositTx) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
     if (body.leaf.length !== 32) return res.status(400).json({ error: "leaf must be 32 bytes" });
-    if (body.commitment.length !== 32) return res.status(400).json({ error: "commitment must be 32 bytes" });
-    if (body.seed.length !== 32) return res.status(400).json({ error: "seed must be 32 bytes" });
 
     let amount: bigint;
     try {
@@ -127,12 +123,11 @@ router.post("/", async (req: Request, res: Response) => {
     const amountBuf = Buffer.alloc(8);
     amountBuf.writeBigUInt64LE(amount);
 
+    // Audit 06 L-01: create_drop no longer takes amount_commitment / password_hash.
     const instructionData = Buffer.concat([
       CREATE_DROP_DISCRIMINATOR,
       new Uint8Array(body.leaf),        // 32
       amountBuf,                        // 8
-      new Uint8Array(body.commitment),  // 32
-      new Uint8Array(body.seed),        // 32
     ]);
 
     const ix = new TransactionInstruction({

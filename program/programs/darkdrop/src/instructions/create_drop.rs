@@ -16,12 +16,17 @@ use crate::merkle_tree::merkle_tree_append;
 /// The receipt is seeded by the full leaf and rent is paid by the depositor,
 /// so the depositor (not the `sender`/relayer) is the sole party who can later
 /// revoke the drop after the time-lock expires.
+// Audit 06 L-01: the previously-accepted `_amount_commitment` and
+// `_password_hash` parameters were REMOVED. They were never read — the Merkle
+// `leaf` is the binding commitment, proven at claim time by the V2 circuit —
+// and their presence in the signature misleadingly invited a no-op `require!`
+// against caller-controlled, unbound bytes. This is a breaking instruction-data
+// change; all create_drop callers (frontend create page, relayer deposit route,
+// e2e scripts) and the IDL were updated in lockstep.
 pub fn handle_create_drop<'info>(
     ctx: Context<'_, '_, '_, 'info, CreateDrop<'info>>,
     leaf: [u8; 32],
     amount: u64,
-    _amount_commitment: [u8; 32],
-    _password_hash: [u8; 32],
 ) -> Result<()> {
     // Validate amount
     require!(amount >= MIN_DEPOSIT_LAMPORTS, DarkDropError::BelowMinDeposit);

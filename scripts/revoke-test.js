@@ -163,8 +163,7 @@ async function main() {
       createDiscriminator,
       leafBytes,
       amountBuf,
-      bigintToBytes32BE(amtCommitment),
-      bigintToBytes32BE(pwdHash),
+      // Audit 06 L-01: amount_commitment / password_hash removed from create_drop
     ]),
   });
 

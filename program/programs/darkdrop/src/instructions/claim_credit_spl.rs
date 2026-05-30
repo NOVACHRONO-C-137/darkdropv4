@@ -3,7 +3,7 @@ use anchor_spl::token::Mint;
 use crate::state::*;
 use crate::errors::DarkDropError;
 use crate::verifier::verify_proof_v2;
-use crate::poseidon::poseidon_hash;
+use crate::poseidon::{poseidon_hash, pubkey_to_field};
 
 /// SPL parallel of `claim_credit` for SOL. Verify a V2 ZK proof, mint a
 /// per-mint nullifier (double-claim guard), and issue a re-randomized
@@ -113,19 +113,6 @@ pub fn handle_claim_credit_spl(
     // deposit↔claim linkage broken at the indexer layer.
 
     Ok(())
-}
-
-/// Pubkey → BN254 field element via Poseidon(hi_128, lo_128).
-/// Identical to the private `pubkey_to_field` in `claim_credit.rs`;
-/// duplicated here to keep the SPL extension free of internal-symbol
-/// reach into the audited file.
-fn pubkey_to_field(pubkey: &Pubkey) -> [u8; 32] {
-    let bytes = pubkey.to_bytes();
-    let mut hi = [0u8; 32];
-    let mut lo = [0u8; 32];
-    hi[16..32].copy_from_slice(&bytes[0..16]);
-    lo[16..32].copy_from_slice(&bytes[16..32]);
-    poseidon_hash(&hi, &lo)
 }
 
 #[derive(Accounts)]

@@ -3,7 +3,7 @@ use anchor_spl::token::Mint;
 use crate::state::*;
 use crate::errors::DarkDropError;
 use crate::verifier::verify_proof_v3;
-use crate::poseidon::poseidon_hash;
+use crate::poseidon::{poseidon_hash, pubkey_to_field};
 
 /// SPL parallel of `claim_from_note_pool`. Second-layer claim path —
 /// the user proves knowledge of an opening for a leaf in the per-mint
@@ -102,15 +102,6 @@ pub fn handle_claim_from_note_pool_spl(
     });
 
     Ok(())
-}
-
-fn pubkey_to_field(pubkey: &Pubkey) -> [u8; 32] {
-    let bytes = pubkey.to_bytes();
-    let mut hi = [0u8; 32];
-    let mut lo = [0u8; 32];
-    hi[16..32].copy_from_slice(&bytes[0..16]);
-    lo[16..32].copy_from_slice(&bytes[16..32]);
-    poseidon_hash(&hi, &lo)
 }
 
 #[derive(Accounts)]

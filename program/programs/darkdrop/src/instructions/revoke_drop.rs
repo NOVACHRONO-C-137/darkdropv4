@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
 use crate::errors::DarkDropError;
-use crate::poseidon::{poseidon_hash_1, poseidon_hash_4};
+use crate::poseidon::{poseidon_hash_1, poseidon_hash_4, u64_to_field_be};
 
 /// Revoke an unclaimed drop after the time-lock expires.
 ///
@@ -113,12 +113,6 @@ pub fn handle_revoke_drop(
     // (rent returned to depositor).
 
     Ok(())
-}
-
-fn u64_to_field_be(val: u64) -> [u8; 32] {
-    let mut bytes = [0u8; 32];
-    bytes[24..32].copy_from_slice(&val.to_be_bytes());
-    bytes
 }
 
 #[derive(Accounts)]

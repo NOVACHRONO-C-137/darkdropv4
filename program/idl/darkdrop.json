@@ -207,24 +207,6 @@
         {
           "name": "data",
           "type": "u64"
-        },
-        {
-          "name": "commitment",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
-        },
-        {
-          "name": "seed",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
         }
       ]
     },

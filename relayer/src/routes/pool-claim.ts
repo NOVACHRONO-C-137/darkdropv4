@@ -23,6 +23,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { config } from "../config";
+import { verifyClaimProofV3 } from "../verify";
 
 const router = Router();
 
@@ -68,6 +69,28 @@ router.post("/", async (req: Request, res: Response) => {
 
     const relayer: Keypair = req.app.locals.relayerKeypair;
     const connection = new Connection(config.rpcUrl, "confirmed");
+
+    // Audit 06 M-01: pre-verify the V3 proof off-chain before spending the
+    // relayer's signature + compute budget. inputs = pool_root(32) || commitment(32).
+    const poolMerkleRoot = new Uint8Array(body.inputs.slice(0, 32));
+    const newStoredCommitment = new Uint8Array(body.inputs.slice(32, 64));
+    let proofValid = false;
+    try {
+      proofValid = await verifyClaimProofV3(
+        body.proof.proofA,
+        body.proof.proofB,
+        body.proof.proofC,
+        poolMerkleRoot,
+        new Uint8Array(body.poolNullifierHash),
+        newStoredCommitment,
+        recipientPubkey.toBytes(),
+      );
+    } catch (e: any) {
+      return res.status(400).json({ error: "V3 proof verification error" });
+    }
+    if (!proofValid) {
+      return res.status(400).json({ error: "Invalid V3 proof" });
+    }
 
     const vault = pda([Buffer.from("vault")]);
     const notePool = pda([Buffer.from("note_pool")]);

@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use crate::state::*;
 use crate::errors::DarkDropError;
-use crate::poseidon::{poseidon_hash, poseidon_hash_4};
+use crate::poseidon::{poseidon_hash, poseidon_hash_4, u64_to_field_be};
 
 /// SPL parallel of `create_drop_to_pool`. Single-TX deposit of SPL tokens
 /// directly into the per-mint Note Pool layer, skipping the main tree.
@@ -151,12 +151,6 @@ pub fn handle_create_drop_to_pool_spl(
         leaf_index
     );
     Ok(())
-}
-
-fn u64_to_field_be(val: u64) -> [u8; 32] {
-    let mut bytes = [0u8; 32];
-    bytes[24..32].copy_from_slice(&val.to_be_bytes());
-    bytes
 }
 
 #[derive(Accounts)]

@@ -222,7 +222,7 @@ router.post("/claim", async (req: Request, res: Response) => {
 interface CreditSplWithdrawRequest {
   mint: string;
   nullifierHash: number[]; // 32 bytes
-  opening: number[]; // 72 bytes: amount(8 LE) + blinding(32) + salt(32)
+  opening: number[]; // 72 bytes: amount(8 LE) + blinding(32) + salt(32). Salt is a fallback (Audit 06 M-02).
   recipient: string;
   recipientAta?: string; // optional; derived from (mint, recipient) if omitted
   rate?: number; // optional fee override; defaults to config.feeRateBps
@@ -264,19 +264,23 @@ router.post("/withdraw", async (req: Request, res: Response) => {
     }
 
     // Off-chain commitment opening verification. Layout (matches SOL CreditNote
-    // — both account types put `commitment` at the same byte range so the same
-    // slice works):
-    //   8(disc) + 1(bump) + 32(recipient) + 32(commitment) + ...
+    // — both account types put `commitment` and `salt` at the same byte ranges
+    // so the same slices work):
+    //   8(disc) + 1(bump) + 32(recipient) + 32(commitment) + 32(nullifier) + 32(salt) + ...
+    // Audit 06 M-02: mirror the on-chain handler — try authoritative on-chain
+    // salt (offset 105) first, then fall back to caller-supplied salt (pool-note
+    // decoy fallback).
     const cnData = creditNoteInfo.data;
     const storedCommitment = cnData.slice(41, 73);
+    const storedSalt = new Uint8Array(cnData.slice(105, 137));
 
     const openingAmount = Buffer.from(body.opening.slice(0, 8)).readBigUInt64LE(0);
     const openingBlinding = new Uint8Array(body.opening.slice(8, 40));
     const openingSalt = new Uint8Array(body.opening.slice(40, 72));
 
-    const commitmentValid = await verifyCommitmentOpening(
-      storedCommitment, openingAmount, openingBlinding, openingSalt,
-    );
+    const commitmentValid =
+      (await verifyCommitmentOpening(storedCommitment, openingAmount, openingBlinding, storedSalt)) ||
+      (await verifyCommitmentOpening(storedCommitment, openingAmount, openingBlinding, openingSalt));
     if (!commitmentValid) {
       return res.status(400).json({ error: "Invalid commitment opening" });
     }

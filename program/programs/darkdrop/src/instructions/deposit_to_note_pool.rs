@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
 use crate::errors::DarkDropError;
-use crate::poseidon::{poseidon_hash, poseidon_hash_4};
+use crate::poseidon::{poseidon_hash, poseidon_hash_4, u64_to_field_be};
 use crate::merkle_tree::note_pool_tree_append;
 
 /// Deposit a credit note into the note pool for second-layer mixing.
@@ -91,12 +91,6 @@ pub fn handle_deposit_to_note_pool(
     // Zero SOL moves. The amount stays in the treasury.
 
     Ok(())
-}
-
-fn u64_to_field_be(val: u64) -> [u8; 32] {
-    let mut bytes = [0u8; 32];
-    bytes[24..32].copy_from_slice(&val.to_be_bytes());
-    bytes
 }
 
 #[derive(Accounts)]

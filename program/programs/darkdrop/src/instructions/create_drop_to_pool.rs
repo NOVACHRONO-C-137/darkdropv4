@@ -3,7 +3,7 @@ use anchor_lang::system_program;
 
 use crate::errors::DarkDropError;
 use crate::merkle_tree::note_pool_tree_append;
-use crate::poseidon::poseidon_hash_4;
+use crate::poseidon::{poseidon_hash_4, u64_to_field_be};
 use crate::state::*;
 
 /// Deposit SOL directly into the Note Pool layer. Single-TX equivalent of
@@ -98,12 +98,6 @@ pub fn handle_create_drop_to_pool(
 
     msg!("pool drop: index={}", leaf_index);
     Ok(())
-}
-
-fn u64_to_field_be(val: u64) -> [u8; 32] {
-    let mut bytes = [0u8; 32];
-    bytes[24..32].copy_from_slice(&val.to_be_bytes());
-    bytes
 }
 
 #[derive(Accounts)]

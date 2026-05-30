@@ -205,8 +205,7 @@ async function main() {
       getDiscriminator("create_drop"),
       feLeafBytes,
       amountBuf,
-      fe_bigintToBytes32BE(amtCommitment),
-      fe_bigintToBytes32BE(0n),
+      // Audit 06 L-01: amount_commitment / password_hash removed from create_drop
     ]),
   });
   const createSig = await sendAndConfirmTransaction(

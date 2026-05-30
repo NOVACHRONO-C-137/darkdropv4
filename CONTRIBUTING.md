@@ -146,6 +146,20 @@ node scripts/test_poseidon_compat.js
 - Run all security tests to verify no regressions.
 - If you added, removed, or changed an instruction's accounts or arguments, update the hand-written IDL at `program/idl/darkdrop.json` (see IDL Management below).
 
+### Deploying a FRESH program — deploy + initialize atomicity (security invariant)
+
+**Audit 06 M-03.** `initialize_vault` has no constraint on which signer becomes the vault authority — **the first caller after a fresh deploy wins**, and the winner gains `admin_sweep`, `pause_deposits`, and (after the time-lock) authority-rotation rights. A watcher monitoring `BPFLoaderUpgradeable` program-creation events can race your init. This is a deployment-process invariant, not a code check:
+
+1. **Deploy and initialize as one tightly-sequenced operation**, from the same deployer key, with no human gap between them. Use `--max-len` on a fresh deploy so the program account is sized with headroom for future upgrades (avoids a later "account data too small" redeploy):
+   ```
+   solana program deploy target/deploy/darkdrop.so --program-id <KEYPAIR> --max-len 500000
+   PROGRAM_ID=<deployed id> node scripts/initialize.js
+   ```
+2. `scripts/initialize.js` enforces the invariant on two axes: (a) it refuses to run unless the **program's upgrade authority matches the deployer key** (a front-runner would not hold it); and (b) when the vault is fresh it initializes from the deployer key and **re-reads the account to assert `vault.authority == deployer`**. If the vault already exists with an unexpected authority — or the upgrade authority doesn't match — it **exits non-zero** rather than proceeding. That is the front-run signal.
+3. **If the race is lost** (init front-run before you ran the script): you still hold the program **upgrade authority**, so the deployment is recoverable — `solana program close <PROGRAM_ID>` (or redeploy to a fresh program id) **before any user funds or claim codes rely on it**, then deploy + initialize again atomically. Never build on a deployment whose `vault.authority` is not your deployer key.
+
+This only matters on a *fresh* deploy (devnet redeploy, mainnet bring-up). The long-lived `GSig1…kfAgkU` deployment is already initialized and is not exposed.
+
 ### If you change the circuit
 
 - Recompile: `circom circuits/darkdrop.circom --r1cs --wasm --sym -o circuits/build/` (or `circuits/note_pool.circom` for V3).
@@ -182,6 +196,18 @@ node scripts/test_poseidon_compat.js
 - **Do not commit private keys, keypairs, or secrets.** The `.gitignore` excludes common patterns, but double-check before committing.
 - **Do not weaken security checks** (remove `require!` statements, relax constraints, etc.) without explicit discussion.
 - **If you find a vulnerability**, see [SECURITY.md](SECURITY.md) for the responsible disclosure process.
+- **A fresh deploy MUST be initialized atomically by the deployer.** `initialize_vault` is first-caller-wins (Audit 06 M-03) — always run `scripts/initialize.js` immediately after `solana program deploy` and confirm it reports the authority as your deployer key. See "Deploying a FRESH program" above.
+
+---
+
+## Supported token standards
+
+**Can I use a Token-2022 mint?** **Not yet.** The SPL extension is bound to legacy
+SPL Token only. A Token-2022 mint fails at account validation with a non-obvious
+`AccountOwnedByWrongProgram` error. This is an intentional scope decision (Audit
+06 M-04) driven by the transfer-fee / leaf-commitment hazard — see
+[`ARCHITECTURE.md`](ARCHITECTURE.md) §15 "Token program binding / Token-2022 scope".
+Legacy SPL mints (e.g. Devnet/Mainnet USDC) are fully supported.
 
 ---
 

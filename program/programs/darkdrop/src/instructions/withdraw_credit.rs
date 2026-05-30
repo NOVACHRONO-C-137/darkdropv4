@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
 use crate::errors::DarkDropError;
-use crate::poseidon::poseidon_hash;
+use crate::poseidon::{poseidon_hash, u64_to_field_be};
 
 /// Withdraw a credit note: open the Poseidon commitment, transfer SOL via direct
 /// lamport manipulation (no CPI, no inner instruction).
@@ -9,9 +9,26 @@ use crate::poseidon::poseidon_hash;
 /// The `opening` parameter is an opaque byte vector containing:
 ///   [0..8]   amount (u64 little-endian)
 ///   [8..40]  blinding factor (32 bytes)
-///   [40..72] salt (32 bytes) — used to verify re-randomized commitment
+///   [40..72] salt (32 bytes) — caller-supplied; used only as a fallback (see below)
 ///
-/// Verification: Poseidon(Poseidon(amount, blinding), salt) == stored_commitment
+/// Audit 06 M-02 — salt handling. The V2 proof does not bind the salt, so a
+/// gasless relayer can substitute the salt it passes to `claim_credit`. To stop
+/// that from bricking a user's withdraw, this handler tries the AUTHORITATIVE
+/// on-chain `credit.salt` FIRST: for a standard `claim_credit` note that is the
+/// exact salt baked into `credit.commitment`, so the withdraw succeeds no matter
+/// which salt the relayer chose.
+///
+/// It then falls back to the caller-supplied salt. This fallback is REQUIRED for
+/// note-pool (`claim_from_note_pool`) credit notes: those store a *decoy*
+/// `credit.salt` (a value derived from the pool nullifier, see
+/// claim_from_note_pool.rs) for indistinguishability, while the real salt is
+/// baked into the proof-bound commitment and is known only to the recipient.
+/// The fallback opens those. It adds no attack surface — pool commitments are
+/// proof-bound, and for standard notes the authoritative check already matched.
+///
+/// Verification (either branch satisfies):
+///   Poseidon(Poseidon(amount, blinding), credit.salt)  == commitment   (standard)
+///   Poseidon(Poseidon(amount, blinding), caller_salt)   == commitment   (pool)
 ///
 /// Fee is computed from `rate` (basis points). rate=50 → 0.5% fee.
 /// No field is named "amount", "fee", or "lamports".
@@ -25,12 +42,12 @@ pub fn handle_withdraw_credit(
     opening: Vec<u8>,
     rate: u16,
 ) -> Result<()> {
-    // Parse opaque opening (72 bytes: amount + blinding + salt)
+    // Parse opaque opening (72 bytes: amount + blinding + caller salt).
     require!(opening.len() == 72, DarkDropError::InvalidInputLength);
 
     let amount = u64::from_le_bytes(opening[0..8].try_into().unwrap());
     let blinding_factor: [u8; 32] = opening[8..40].try_into().unwrap();
-    let salt: [u8; 32] = opening[40..72].try_into().unwrap();
+    let caller_salt: [u8; 32] = opening[40..72].try_into().unwrap();
 
     let credit = &ctx.accounts.credit_note;
 
@@ -40,16 +57,20 @@ pub fn handle_withdraw_credit(
         DarkDropError::UnauthorizedWithdraw
     );
 
-    // Recompute the re-randomized commitment:
+    // Recompute the re-randomized commitment (Audit 06 M-02). original is fixed;
+    // the salt is what differs between standard and pool notes:
     //   original = Poseidon(amount, blinding_factor)
-    //   stored   = Poseidon(original, salt)
+    // Try the AUTHORITATIVE on-chain credit.salt first (defeats relayer salt
+    // substitution for standard notes), then fall back to the caller-supplied
+    // salt (required for note-pool notes, whose credit.salt is a decoy).
     let amount_bytes = u64_to_field_be(amount);
     let original_commitment = poseidon_hash(&amount_bytes, &blinding_factor);
-    let computed_commitment = poseidon_hash(&original_commitment, &salt);
-
-    // Verify re-randomized commitment matches stored value
+    let matches_stored =
+        poseidon_hash(&original_commitment, &credit.salt) == credit.commitment;
+    let matches_caller =
+        poseidon_hash(&original_commitment, &caller_salt) == credit.commitment;
     require!(
-        computed_commitment == credit.commitment,
+        matches_stored || matches_caller,
         DarkDropError::CommitmentMismatch
     );
 
@@ -115,13 +136,6 @@ pub fn handle_withdraw_credit(
     // CreditNote PDA is closed by Anchor's `close = payer` constraint
 
     Ok(())
-}
-
-/// Convert a u64 to a 32-byte big-endian field element.
-fn u64_to_field_be(val: u64) -> [u8; 32] {
-    let mut bytes = [0u8; 32];
-    bytes[24..32].copy_from_slice(&val.to_be_bytes());
-    bytes
 }
 
 #[derive(Accounts)]

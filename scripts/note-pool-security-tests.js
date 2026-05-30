@@ -132,7 +132,8 @@ async function setupPoolEntry(connection, payer, recipient, vault, merkleTree, t
       { pubkey: payer.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    data: Buffer.concat([getDiscriminator("create_drop"), bigintToBytes32BE(leaf), amountBuf, bigintToBytes32BE(amtCommitment), bigintToBytes32BE(0n)]),
+    // Audit 06 L-01: amount_commitment / password_hash removed from create_drop
+    data: Buffer.concat([getDiscriminator("create_drop"), bigintToBytes32BE(leaf), amountBuf]),
   });
   await sendAndConfirmTransaction(connection, new Transaction().add(createDropIx), [payer]);
 
@@ -380,7 +381,8 @@ async function main() {
         { pubkey: payer.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
-      data: Buffer.concat([getDiscriminator("create_drop"), bigintToBytes32BE(lf), ab, bigintToBytes32BE(ac), bigintToBytes32BE(0n)]),
+      // Audit 06 L-01: amount_commitment / password_hash removed from create_drop
+      data: Buffer.concat([getDiscriminator("create_drop"), bigintToBytes32BE(lf), ab]),
     })), [payer]);
 
     // claim_credit

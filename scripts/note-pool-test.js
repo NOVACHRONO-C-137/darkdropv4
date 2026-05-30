@@ -284,7 +284,9 @@ async function main() {
   const poolNullifier = randomField();
   const poolBlinding = randomField();
 
-  // Opening: amount(8 LE) + blinding(32) + salt(32) = 72 bytes
+  // Opening: amount(8 LE) + blinding(32) + salt(32) = 72 bytes. Pool notes need
+  // the caller salt: the program tries on-chain credit.salt first (a decoy for
+  // pool notes) then falls back to this salt (Audit 06 M-02).
   const openingAmountBuf = Buffer.alloc(8);
   openingAmountBuf.writeBigUInt64LE(dropAmount);
   const openingData = Buffer.concat([openingAmountBuf, bigintToBytes32BE(blindingFactor), claimSaltBytes]);

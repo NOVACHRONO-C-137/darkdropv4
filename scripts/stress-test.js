@@ -114,7 +114,7 @@ function buildCreateDrop(sender, leaf, amount, commitment, pwdHash) {
     { pubkey: treasury, isSigner: false, isWritable: true },
     { pubkey: sender, isSigner: true, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-  ], data: Buffer.concat([disc("create_drop"), b32(leaf), ab, b32(commitment), b32(pwdHash)]) });
+  ], data: Buffer.concat([disc("create_drop"), b32(leaf), ab]) }); // Audit 06 L-01: dropped amount_commitment / password_hash
 }
 
 function buildClaimCredit(nhb, proofA, proofB, proofC, root, commitment, pwdHash, recipient, payer, saltBigint) {

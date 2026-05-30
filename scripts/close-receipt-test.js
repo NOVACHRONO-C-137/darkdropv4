@@ -196,8 +196,7 @@ async function main() {
         getDiscriminator("create_drop"),
         leafBytes,
         amountBuf,
-        bigintToBytes32BE(amtCommitment),
-        bigintToBytes32BE(0n),
+        // Audit 06 L-01: amount_commitment / password_hash removed from create_drop
       ]),
     });
     const sig = await sendAndConfirmTransaction(connection, new Transaction().add(ix), [payer, depositor]);

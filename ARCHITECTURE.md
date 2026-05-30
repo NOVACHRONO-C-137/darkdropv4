@@ -406,6 +406,14 @@ This is a deliberate design trade-off:
 
 `revoke_drop` added April 20, 2026 so depositors can reclaim SOL from drops whose claim codes were lost. A `DepositReceipt` PDA is optionally created at deposit time (via `remaining_accounts` for backward compatibility with the legacy 5-account `create_drop` call). After a 30-day time-lock, the depositor submits the full leaf preimage and the program verifies `leaf == Poseidon(secret, nullifier, receipt.amount, blinding)` on-chain. Because the leaf is a collision-resistant commitment, the depositor is forced to reveal the same `nullifier` that any legitimate claimer would use — claim and revoke share the `[b"nullifier", nullifier_hash]` PDA namespace, giving mutual exclusion. Refund is via direct lamport manipulation (no CPI). See the REVOKE INSTRUCTION section above for the full design and the Option-A-was-broken rationale.
 
+### 15. Token program binding / Token-2022 scope (Audit 06 M-04)
+
+The SPL extension is bound to **legacy SPL Token only** (`TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`). Every SPL instruction uses `anchor_spl::token::{Mint, Token, TokenAccount, Transfer}`, and `Program<'info, Token>` / `Account<'info, Mint>` lock both the token program id and the legacy account schema. **Token-2022 (`TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`) is deliberately out of scope.**
+
+- **Symptom for integrators.** Registering a Token-2022 mint fails at Anchor account deserialization with `AccountOwnedByWrongProgram` (or `ConstraintTokenMint`), which does not self-explain. This is by design; the binding is documented at the `mint` account in `initialize_mint_config.rs`.
+- **Why not just relax the binding.** Token-2022's `TransferFeeConfig` extension delivers fewer tokens than the transfer specifies. The pool-leaf construction in `create_drop_to_pool_spl` builds the leaf from the CPI-supplied `amount`. If the Token constraint were relaxed to accept Token-2022 without auditing the fee interaction, the on-chain leaf would commit to the **pre-fee** amount while the vault receives the **post-fee** amount — reintroducing the dishonest-leaf class that Audit 04 I-01 closed for the legacy path.
+- **If Token-2022 is ever added.** It is a separate design-and-audit effort: switch to `anchor_spl::token_interface` types and add explicit transfer-fee accounting on every ingress path so the leaf reflects the amount actually credited to the vault.
+
 ---
 
 ## CIRCUITS

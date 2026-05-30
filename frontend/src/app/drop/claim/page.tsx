@@ -287,7 +287,10 @@ export default function ClaimPage() {
     if (!claimResp.ok) throw new Error(claimResult.error || "Relayer rejected claim");
 
     setStage("withdrawing");
-    // Opening: amount(u64 LE, 8) || blinding(32) || salt(32)
+    // Opening: amount(u64 LE, 8) || blinding(32) || salt(32). The program tries
+    // the on-chain credit.salt first and falls back to this caller salt, which
+    // is required for note-pool notes (Audit 06 M-02). Standard notes work with
+    // either, so we keep sending the salt.
     const opening = new Uint8Array(72);
     new DataView(opening.buffer).setBigUint64(0, amount, true);
     opening.set(bigintToBytes32BE(blindingFactor), 8);
@@ -512,9 +515,11 @@ export default function ClaimPage() {
         : getCreditNotePDA(nullifierHashBytes);
       const [treasury] = getTreasuryPDA();
 
-      // Withdraw opening: amount(8 LE) + blinding(32) + salt(32). Pool uses
-      // the fresh (new_blinding, new_salt) produced by the V3 proof; standard
-      // uses the code's blinding plus the random salt we generated above.
+      // Withdraw opening: amount(8 LE) + blinding(32) + salt(32). Pool uses the
+      // fresh (new_blinding, new_salt) from the V3 proof; standard uses the
+      // code's blinding plus the random salt. The program tries on-chain
+      // credit.salt first and falls back to this salt — the fallback is what
+      // opens note-pool notes (Audit 06 M-02).
       const openingBuf = new Uint8Array(72);
       new DataView(openingBuf.buffer).setBigUint64(0, amount, true);
       openingBuf.set(bigintToBytes32BE(withdrawBlinding), 8);
@@ -640,6 +645,8 @@ export default function ClaimPage() {
         });
 
         // TX 2: withdraw_credit (SOL moves via direct lamport manipulation)
+        // Opening is 72 bytes (amount + blinding + salt); program tries on-chain
+        // credit.salt first, falls back to this salt for pool notes (Audit 06 M-02).
         setStage("withdrawing");
         const openingLenBuf = new Uint8Array(4);
         new DataView(openingLenBuf.buffer).setUint32(0, 72, true);

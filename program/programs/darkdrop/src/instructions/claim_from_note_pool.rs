@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use crate::state::*;
 use crate::errors::DarkDropError;
 use crate::verifier::verify_proof_v3;
-use crate::poseidon::poseidon_hash;
+use crate::poseidon::{poseidon_hash, pubkey_to_field};
 
 /// Claim a fresh credit note from the note pool.
 ///
@@ -92,16 +92,6 @@ pub fn handle_claim_from_note_pool(
     // NO SOL TRANSFER. NO AMOUNT ANYWHERE.
 
     Ok(())
-}
-
-/// Convert a Pubkey to a BN254 field element via Poseidon hash.
-fn pubkey_to_field(pubkey: &Pubkey) -> [u8; 32] {
-    let bytes = pubkey.to_bytes();
-    let mut hi = [0u8; 32];
-    let mut lo = [0u8; 32];
-    hi[16..32].copy_from_slice(&bytes[0..16]);
-    lo[16..32].copy_from_slice(&bytes[16..32]);
-    poseidon_hash(&hi, &lo)
 }
 
 #[derive(Accounts)]
