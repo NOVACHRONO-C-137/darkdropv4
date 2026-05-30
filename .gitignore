@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 package-lock.json
+# Exception: pin ceremony script deps for reproducibility (see PR #15)
+!scripts/package-lock.json
 
 # Build artifacts
 target/
