@@ -263,7 +263,7 @@ async function main() {
     const ni = td.readUInt32LE(40);
     const leafIndex = ni - 1;
     const root = Buffer.from(td.slice(48, 80));
-    const fso = 80 + 30 * 32;
+    const fso = 80 + 256 * 32;
 
     const pe = [], pi = [];
     let x = leafIndex;
@@ -419,7 +419,7 @@ async function main() {
       // Immediately generate proof from on-chain filled_subtrees
       const td = (await connection.getAccountInfo(merkleTree)).data;
       const ni = td.readUInt32LE(40); const lidx = ni - 1;
-      const root = Buffer.from(td.slice(48, 80)); const fso = 80 + 30 * 32;
+      const root = Buffer.from(td.slice(48, 80)); const fso = 80 + 256 * 32;
       const pe2 = [], pi2 = []; let x2 = lidx;
       for (let j = 0; j < MERKLE_DEPTH; j++) {
         const b = x2 & 1; pi2.push(b.toString());

@@ -27,7 +27,7 @@ const fs = require("fs");
 const path = require("path");
 
 const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8899";
-const PROGRAM_ID = new PublicKey("GSig1QYVwPVhHF6oVEwhadAwdWjTqtq6H5cSMEkfAgkU");
+const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID || "GSig1QYVwPVhHF6oVEwhadAwdWjTqtq6H5cSMEkfAgkU");
 const KEYPAIR_PATH = process.env.KEYPAIR || path.join(require("os").homedir(), ".config/solana/id.json");
 const BUILD_DIR = path.join(__dirname, "../circuits/build");
 
@@ -105,7 +105,7 @@ function serializeProof(proof) {
 function readTreeState(treeData) {
   const nextIndex = treeData.readUInt32LE(8 + 32);
   const onChainRoot = treeData.slice(8 + 32 + 4 + 4, 8 + 32 + 4 + 4 + 32);
-  const filledSubtreesOffset = 8 + 32 + 4 + 4 + 32 + 30 * 32;
+  const filledSubtreesOffset = 8 + 32 + 4 + 4 + 32 + 256 * 32;
   return { nextIndex, onChainRoot, filledSubtreesOffset, treeData };
 }
 
@@ -307,7 +307,7 @@ async function main() {
       { pubkey: notePool, isSigner: false, isWritable: true },
       { pubkey: notePoolTree, isSigner: false, isWritable: true },
       { pubkey: creditNotePDA, isSigner: false, isWritable: true },
-      { pubkey: recipient.publicKey, isSigner: false, isWritable: false },
+      { pubkey: recipient.publicKey, isSigner: true, isWritable: false },
       { pubkey: payer.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
@@ -319,7 +319,7 @@ async function main() {
     ]),
   });
 
-  await sendAndConfirmTransaction(connection, new Transaction().add(depositToPoolIx), [payer]);
+  await sendAndConfirmTransaction(connection, new Transaction().add(depositToPoolIx), [payer, recipient]);
   console.log("  Credit note deposited to note pool");
 
   // Verify old credit note is closed
@@ -442,7 +442,7 @@ async function main() {
       { pubkey: treasury, isSigner: false, isWritable: true },
       { pubkey: freshCreditNotePDA, isSigner: false, isWritable: true },
       { pubkey: recipient.publicKey, isSigner: false, isWritable: true },
-      { pubkey: payer.publicKey, isSigner: false, isWritable: true }, // fee_recipient
+      // Audit 03 I-04 removed the redundant fee_recipient account slot.
       { pubkey: payer.publicKey, isSigner: true, isWritable: true },  // payer
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],

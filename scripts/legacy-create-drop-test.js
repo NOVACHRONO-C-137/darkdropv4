@@ -180,7 +180,7 @@ async function main() {
   const treeData = treeInfo.data;
   const nextIndex = treeData.readUInt32LE(8 + 32);
   const onChainRoot = treeData.slice(8 + 32 + 4 + 4, 8 + 32 + 4 + 4 + 32);
-  const filledSubtreesOffset = 8 + 32 + 4 + 4 + 32 + 30 * 32;
+  const filledSubtreesOffset = 8 + 32 + 4 + 4 + 32 + 256 * 32;
   const filledSubtrees = [];
   for (let i = 0; i < MERKLE_DEPTH; i++) {
     filledSubtrees.push(treeData.slice(filledSubtreesOffset + i * 32, filledSubtreesOffset + (i + 1) * 32));

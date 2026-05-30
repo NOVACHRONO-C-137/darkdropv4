@@ -27,7 +27,7 @@ const path = require("path");
 
 const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8899";
 const RELAYER_URL = process.env.RELAYER_URL || "http://localhost:3001";
-const PROGRAM_ID = new PublicKey("GSig1QYVwPVhHF6oVEwhadAwdWjTqtq6H5cSMEkfAgkU");
+const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID || "GSig1QYVwPVhHF6oVEwhadAwdWjTqtq6H5cSMEkfAgkU");
 const KEYPAIR_PATH = process.env.KEYPAIR || path.join(require("os").homedir(), ".config/solana/id.json");
 const BUILD_DIR = path.join(__dirname, "../circuits/build");
 const WASM_PATH = path.join(BUILD_DIR, "darkdrop_js/darkdrop.wasm");
@@ -156,7 +156,7 @@ async function main() {
   const treeAccount = await connection.getAccountInfo(merkleTree);
   const treeData = treeAccount.data;
   const onChainRoot = treeData.slice(8 + 32 + 4 + 4, 8 + 32 + 4 + 4 + 32);
-  const filledSubtreesOffset = 8 + 32 + 4 + 4 + 32 + 30 * 32;
+  const filledSubtreesOffset = 8 + 32 + 4 + 4 + 32 + 256 * 32;
   const zeroHashes = getZeroHashes();
   const pathElements = [], pathIndices = [];
   let idx = leafIndex;

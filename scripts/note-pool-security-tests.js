@@ -25,7 +25,7 @@ const fs = require("fs");
 const path = require("path");
 
 const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8899";
-const PROGRAM_ID = new PublicKey("GSig1QYVwPVhHF6oVEwhadAwdWjTqtq6H5cSMEkfAgkU");
+const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID || "GSig1QYVwPVhHF6oVEwhadAwdWjTqtq6H5cSMEkfAgkU");
 const KEYPAIR_PATH = process.env.KEYPAIR || path.join(require("os").homedir(), ".config/solana/id.json");
 const BUILD_DIR = path.join(__dirname, "../circuits/build");
 const V2_WASM = path.join(BUILD_DIR, "darkdrop_js/darkdrop.wasm");
@@ -73,7 +73,7 @@ function getPoolNullifierPDA(h) { return PublicKey.findProgramAddressSync([Buffe
 function readTreeState(treeData) {
   const nextIndex = treeData.readUInt32LE(8 + 32);
   const onChainRoot = treeData.slice(8 + 32 + 4 + 4, 8 + 32 + 4 + 4 + 32);
-  const filledSubtreesOffset = 8 + 32 + 4 + 4 + 32 + 30 * 32;
+  const filledSubtreesOffset = 8 + 32 + 4 + 4 + 32 + 256 * 32;
   return { nextIndex, onChainRoot, filledSubtreesOffset, treeData };
 }
 function buildMerkleProof(treeState, leafIndex) {
@@ -189,13 +189,13 @@ async function setupPoolEntry(connection, payer, recipient, vault, merkleTree, t
       { pubkey: notePool, isSigner: false, isWritable: true },
       { pubkey: notePoolTree, isSigner: false, isWritable: true },
       { pubkey: creditNotePDA, isSigner: false, isWritable: true },
-      { pubkey: recipient.publicKey, isSigner: false, isWritable: false },
+      { pubkey: recipient.publicKey, isSigner: true, isWritable: false },
       { pubkey: payer.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     data: Buffer.concat([getDiscriminator("deposit_to_note_pool"), nullifierHashBytes, ol, opening, pl, poolParams]),
   });
-  await sendAndConfirmTransaction(connection, new Transaction().add(depositPoolIx), [payer]);
+  await sendAndConfirmTransaction(connection, new Transaction().add(depositPoolIx), [payer, recipient]);
 
   return { dropAmount, poolSecret, poolNullifier, poolBlinding };
 }
