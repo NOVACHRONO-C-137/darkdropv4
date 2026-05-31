@@ -263,13 +263,13 @@ router.post("/withdraw", async (req: Request, res: Response) => {
     });
 
     // Extract amount from opening for logging
-    const amountFromOpening = Buffer.from(body.opening.slice(0, 8)).readBigUInt64LE(0);
-    const fee = (amountFromOpening * BigInt(rate)) / 10000n;
-    const net = amountFromOpening - fee;
-
-    console.log(
-      `Credit withdraw relayed: ${signature} | net=${net} | fee=${fee} | recipient=${body.recipient}`
-    );
+    // I1 (#22): do NOT log the withdrawn amount or any value derived from the
+    // opening (net/fee). This is a privacy protocol — the amount is hidden
+    // on-chain, and the relayer is an amount-privacy trust party for the
+    // withdraw leg (see SECURITY.md). Persisting amounts in logs would let
+    // anyone with the logs link recipient <-> amount. Log only the signature
+    // and the recipient (already public on-chain in the withdraw tx).
+    console.log(`Credit withdraw relayed: ${signature} | recipient=${body.recipient}`);
 
     res.json({
       success: true,

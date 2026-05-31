@@ -353,12 +353,9 @@ router.post("/withdraw", async (req: Request, res: Response) => {
       commitment: "confirmed",
     });
 
-    const fee = (openingAmount * BigInt(rate)) / 10000n;
-    const net = openingAmount - fee;
-
-    console.log(
-      `Credit-SPL withdraw relayed: ${signature} | mint=${body.mint} | net=${net} | fee=${fee} | recipient=${body.recipient}`
-    );
+    // I1 (#22): do not log amount-derived values (net/fee) — the relayer is an
+    // amount-privacy trust party for the withdraw leg (see SECURITY.md).
+    console.log(`Credit-SPL withdraw relayed: ${signature} | mint=${body.mint} | recipient=${body.recipient}`);
 
     res.json({
       success: true,

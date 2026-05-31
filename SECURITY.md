@@ -53,6 +53,8 @@ The following are **known design limitations**, not vulnerabilities. They are do
 
 5. **Deposit-side privacy leak on the revoke path:** Creating a `DepositReceipt` at deposit time establishes a permanent on-chain linkage between the depositor wallet, the leaf, and the amount. This is observable from the moment of deposit, regardless of whether revoke is later exercised or the receipt is closed. Users who prioritize claim privacy should use the legacy 5-account `create_drop` call (no receipt, no revoke). See Audit 04 L-04 for the full analysis.
 
+6. **The relayer is an amount-privacy trust party for the withdraw leg.** Amount is hidden **on-chain**, not **from the relayer**. To pre-verify a withdraw before spending gas, the client sends the relayer the credit-note `opening` (`amount || blinding || salt`) in cleartext (`/credit/withdraw`, `/credit-spl/withdraw`). A relayer operator — or anyone with access to a compromised relayer or its logs — therefore learns the exact withdrawn amount and the blinding factor, and can link recipient ↔ amount for relayed withdrawals. This does **not** let the relayer steal funds (the ZK proof / commitment binds the payout to the recipient); the relayer can still only censor. As of issue #22 (I1) the relayer no longer **logs** amounts or any value derived from the opening, which shrinks the exposure window to live request handling, but the trust boundary remains: users who require amount-privacy *from the relayer* should construct and submit the withdraw transaction themselves (the relayer is optional — it only saves the recipient from needing gas). A future option is client-side instruction construction with the relayer co-signing solely as fee payer.
+
 ---
 
 ## Security Audits
