@@ -31,22 +31,12 @@ pub mod darkdrop {
         instructions::create_drop::handle_create_drop(ctx, leaf, amount)
     }
 
-    /// Legacy claim: verify ZK proof (V1 circuit, 6 public inputs), release SOL directly.
-    /// Kept for backward compatibility with proofs generated against the old circuit.
-    pub fn claim(
-        ctx: Context<Claim>,
-        proof: ProofData,
-        merkle_root: [u8; 32],
-        nullifier_hash: [u8; 32],
-        amount: u64,
-        amount_commitment: [u8; 32],
-        password_hash: [u8; 32],
-        fee_lamports: u64,
-    ) -> Result<()> {
-        instructions::claim::handle_claim(
-            ctx, proof, merkle_root, nullifier_hash, amount, amount_commitment, password_hash, fee_lamports,
-        )
-    }
+    // Legacy V1 `claim` (direct-SOL, 6 public inputs) was retired in #18: its
+    // ZK circuit source was absent from the repo, so the V1 nullifier
+    // derivation could not be audited against V2's in the shared
+    // [b"nullifier", hash] namespace (cross-version double-spend surface). V2
+    // `claim_credit` supersedes it. See verifier.rs / vk.rs (verify_proof and
+    // verifying_key_v1 removed).
 
     /// Claim as credit note: verify ZK proof (V2 circuit, 5 public inputs),
     /// store re-randomized commitment in CreditNote PDA. ZERO SOL moves.
