@@ -392,6 +392,19 @@ async function initializeVault(connection, payer) {
 async function main() {
   console.log("=== DarkDrop V4 — Security Tests ===\n");
 
+  // SKIPPED (#18): all six cases here (double-claim, invalid proof, wrong
+  // password, wrong recipient, amount tampering, exhausted root) submit the
+  // legacy V1 `claim` instruction via submitClaim()/getDiscriminator("claim"),
+  // which was retired in #18. The instruction no longer exists, so every case
+  // would fail to build rather than test what it intends. The equivalent
+  // security properties on the LIVE paths are covered by:
+  //   - security-credit-tests.js     (V2 claim_credit: double-claim, bad proof, …)
+  //   - note-pool-security-tests.js  (V3 note pool)
+  //   - security-revoke-tests.js     (revoke path)
+  // Exit 0 so deploy-test.sh does not register a false failure at the dead step.
+  console.log("SKIPPED: V1 `claim` security cases retired in #18 — see security-credit-tests.js / note-pool-security-tests.js / security-revoke-tests.js.");
+  return;
+
   poseidon = await buildPoseidon();
   F = poseidon.F;
 

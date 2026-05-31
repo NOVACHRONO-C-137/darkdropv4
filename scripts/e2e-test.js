@@ -155,6 +155,16 @@ class MerkleTree {
 async function main() {
   console.log("=== DarkDrop V4 — End-to-End On-Chain Test ===\n");
 
+  // SKIPPED (#18): this suite exercises ONLY the legacy V1 `claim` instruction
+  // (STEP 5 builds getDiscriminator("claim") and releases SOL directly), which
+  // was retired in #18 — its ZK circuit source was absent and unauditable, so
+  // the instruction no longer exists and the claim TX would fail. Live-path
+  // end-to-end coverage now lives in e2e-credit-test.js (V2 credit flow) and
+  // note-pool-test.js (note pool flow). Exit 0 so deploy-test.sh does not
+  // register a false failure at the dead V1 step.
+  console.log("SKIPPED: legacy V1 `claim` retired in #18 — see e2e-credit-test.js for the live V2 flow.");
+  return;
+
   // Init
   console.log("Initializing...");
   poseidon = await buildPoseidon();

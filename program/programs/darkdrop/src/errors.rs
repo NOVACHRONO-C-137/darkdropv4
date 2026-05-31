@@ -83,4 +83,11 @@ pub enum DarkDropError {
 
     #[msg("Mint does not match the expected mint for this account")]
     WrongMint,
+
+    /// Audit F1 (#17): a Groth16 public input was not a canonical BN254 scalar
+    /// (value >= field order r). Non-canonical inputs are scalar-malleable —
+    /// `n` and `n + r` verify against the same proof but produce distinct PDA
+    /// seeds, enabling nullifier double-spend. Every public input must be < r.
+    #[msg("Public input is not a canonical BN254 scalar (value >= field order)")]
+    NonCanonicalInput,
 }
