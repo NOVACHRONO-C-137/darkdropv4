@@ -36,8 +36,9 @@ pub fn is_canonical(value: &[u8; 32]) -> bool {
 }
 
 /// Reject the proof unless every public input is a canonical BN254 scalar.
-/// Called at the top of every `verify_proof*` so all claim paths (SOL + SPL,
-/// V1/V2/V3) inherit the guard uniformly.
+/// Called at the top of every `verify_proof*` so all live claim paths (SOL +
+/// SPL, V2/V3) inherit the guard uniformly. (The V1 path that also routed
+/// through this guard was retired in #18.)
 fn require_canonical_inputs(public_inputs: &[[u8; 32]]) -> Result<()> {
     for input in public_inputs.iter() {
         require!(is_canonical(input), DarkDropError::NonCanonicalInput);
@@ -45,41 +46,10 @@ fn require_canonical_inputs(public_inputs: &[[u8; 32]]) -> Result<()> {
     Ok(())
 }
 
-/// Verify a Groth16 proof against the V1 verification key (6 public inputs).
-/// Used by the legacy `claim` instruction for backward compatibility.
-///
-/// Public inputs order (V1):
-///   [0] amount
-///   [1] merkle_root
-///   [2] nullifier_hash
-///   [3] recipient
-///   [4] amount_commitment
-///   [5] password_hash
-pub fn verify_proof(
-    proof: &ProofData,
-    public_inputs: &[[u8; 32]; 6],
-) -> Result<()> {
-    // Audit F1 (#17): reject scalar-malleable (non-canonical) public inputs
-    // before verification, so a nullifier `n + r` can never reach a PDA seed.
-    require_canonical_inputs(public_inputs)?;
-
-    let vk = vk::verifying_key_v1();
-
-    let mut verifier = Groth16Verifier::new(
-        &proof.proof_a,
-        &proof.proof_b,
-        &proof.proof_c,
-        public_inputs,
-        &vk,
-    )
-    .map_err(|_| DarkDropError::InvalidProof)?;
-
-    verifier
-        .verify()
-        .map_err(|_| DarkDropError::InvalidProof)?;
-
-    Ok(())
-}
+// The legacy V1 `verify_proof` (6 public inputs, V1 verification key) was
+// removed in #18 along with the `claim` instruction it served — the V1
+// circuit source was absent and could not be audited. V2/V3 verifiers below
+// are unaffected; they reuse the shared alpha/beta/gamma ceremony params.
 
 /// Verify a Groth16 proof against the V2 verification key (5 public inputs).
 /// Used by `claim_credit` — amount is private, not a public input.
