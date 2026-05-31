@@ -3,6 +3,10 @@ node_modules/
 package-lock.json
 # Exception: pin ceremony script deps for reproducibility (see PR #15)
 !scripts/package-lock.json
+# Exception (F4 #21): pin relayer + frontend deps for reproducible installs —
+# proof pre-verification (snarkjs/circomlibjs) + tx signing (@solana/web3.js).
+!relayer/package-lock.json
+!frontend/package-lock.json
 
 # Build artifacts
 target/
