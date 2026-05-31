@@ -135,29 +135,33 @@ pub struct MerkleTreeAccount {
 impl MerkleTreeAccount {
     /// Check if a root exists in the history
     pub fn is_known_root(&self, root: &[u8; 32]) -> bool {
+        // Audit 06 L-02 / issue #16: scan the FULL circular buffer, skipping
+        // (not stopping at) sentinel slots. The schema-v2 migration of a V1
+        // ring that had wrapped preserves all 30 V1 slots as live roots while
+        // root_history_index points mid-ring; the remaining slots are
+        // sentinel-filled. A backward walk that breaks on the first sentinel
+        // orphans the live roots that sit after a sentinel in descending-ring
+        // order and wrongly rejects their (valid) claim codes — a liveness
+        // regression. A full scan is layout-independent (partial fill, full
+        // wrap, and migrated-from-wrapped-V1 all resolve correctly) and
+        // repairs already-migrated trees purely on the read path. Cost is
+        // ROOT_HISTORY_SIZE in-memory 32-byte compares — negligible.
+        //
+        // Soundness: the empty-tree sentinel is never a real stored root, so
+        // we reject it up front and never compare it against a slot. This
+        // means neither a sentinel query nor a sentinel-filled slot can ever
+        // produce a false positive.
+        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
+        if *root == sentinel {
+            return false;
+        }
         if *root == self.current_root {
             return true;
         }
-        // Audit 06 L-02: walk the circular buffer backward from the most recent
-        // write instead of scanning all ROOT_HISTORY_SIZE slots linearly.
-        // Unused slots hold the ZERO_HASHES sentinel; reaching one means we have
-        // scanned the entire filled region (newest -> oldest) and can stop. The
-        // buffer fills from index 1 (increment-then-write), so a forward "break
-        // on first sentinel" from index 0 would be incorrect — the backward walk
-        // from root_history_index is the correct shape. Real roots never equal
-        // the empty-tree sentinel, so this never skips a valid root. Worst case
-        // (fully wrapped buffer) is unchanged; early tree life is much cheaper.
-        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
-        let mut i = self.root_history_index as usize;
-        for _ in 0..ROOT_HISTORY_SIZE {
-            let candidate = self.root_history[i];
-            if candidate == sentinel {
-                break;
-            }
-            if candidate == *root {
+        for candidate in self.root_history.iter() {
+            if *candidate == *root {
                 return true;
             }
-            i = if i == 0 { ROOT_HISTORY_SIZE - 1 } else { i - 1 };
         }
         false
     }
@@ -272,29 +276,33 @@ pub struct NotePoolTree {
 impl NotePoolTree {
     /// Check if a root exists in the history
     pub fn is_known_root(&self, root: &[u8; 32]) -> bool {
+        // Audit 06 L-02 / issue #16: scan the FULL circular buffer, skipping
+        // (not stopping at) sentinel slots. The schema-v2 migration of a V1
+        // ring that had wrapped preserves all 30 V1 slots as live roots while
+        // root_history_index points mid-ring; the remaining slots are
+        // sentinel-filled. A backward walk that breaks on the first sentinel
+        // orphans the live roots that sit after a sentinel in descending-ring
+        // order and wrongly rejects their (valid) claim codes — a liveness
+        // regression. A full scan is layout-independent (partial fill, full
+        // wrap, and migrated-from-wrapped-V1 all resolve correctly) and
+        // repairs already-migrated trees purely on the read path. Cost is
+        // ROOT_HISTORY_SIZE in-memory 32-byte compares — negligible.
+        //
+        // Soundness: the empty-tree sentinel is never a real stored root, so
+        // we reject it up front and never compare it against a slot. This
+        // means neither a sentinel query nor a sentinel-filled slot can ever
+        // produce a false positive.
+        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
+        if *root == sentinel {
+            return false;
+        }
         if *root == self.current_root {
             return true;
         }
-        // Audit 06 L-02: walk the circular buffer backward from the most recent
-        // write instead of scanning all ROOT_HISTORY_SIZE slots linearly.
-        // Unused slots hold the ZERO_HASHES sentinel; reaching one means we have
-        // scanned the entire filled region (newest -> oldest) and can stop. The
-        // buffer fills from index 1 (increment-then-write), so a forward "break
-        // on first sentinel" from index 0 would be incorrect — the backward walk
-        // from root_history_index is the correct shape. Real roots never equal
-        // the empty-tree sentinel, so this never skips a valid root. Worst case
-        // (fully wrapped buffer) is unchanged; early tree life is much cheaper.
-        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
-        let mut i = self.root_history_index as usize;
-        for _ in 0..ROOT_HISTORY_SIZE {
-            let candidate = self.root_history[i];
-            if candidate == sentinel {
-                break;
-            }
-            if candidate == *root {
+        for candidate in self.root_history.iter() {
+            if *candidate == *root {
                 return true;
             }
-            i = if i == 0 { ROOT_HISTORY_SIZE - 1 } else { i - 1 };
         }
         false
     }
@@ -458,29 +466,33 @@ pub struct MerkleTreeSpl {
 impl MerkleTreeSpl {
     /// Check if a root exists in the history.
     pub fn is_known_root(&self, root: &[u8; 32]) -> bool {
+        // Audit 06 L-02 / issue #16: scan the FULL circular buffer, skipping
+        // (not stopping at) sentinel slots. The schema-v2 migration of a V1
+        // ring that had wrapped preserves all 30 V1 slots as live roots while
+        // root_history_index points mid-ring; the remaining slots are
+        // sentinel-filled. A backward walk that breaks on the first sentinel
+        // orphans the live roots that sit after a sentinel in descending-ring
+        // order and wrongly rejects their (valid) claim codes — a liveness
+        // regression. A full scan is layout-independent (partial fill, full
+        // wrap, and migrated-from-wrapped-V1 all resolve correctly) and
+        // repairs already-migrated trees purely on the read path. Cost is
+        // ROOT_HISTORY_SIZE in-memory 32-byte compares — negligible.
+        //
+        // Soundness: the empty-tree sentinel is never a real stored root, so
+        // we reject it up front and never compare it against a slot. This
+        // means neither a sentinel query nor a sentinel-filled slot can ever
+        // produce a false positive.
+        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
+        if *root == sentinel {
+            return false;
+        }
         if *root == self.current_root {
             return true;
         }
-        // Audit 06 L-02: walk the circular buffer backward from the most recent
-        // write instead of scanning all ROOT_HISTORY_SIZE slots linearly.
-        // Unused slots hold the ZERO_HASHES sentinel; reaching one means we have
-        // scanned the entire filled region (newest -> oldest) and can stop. The
-        // buffer fills from index 1 (increment-then-write), so a forward "break
-        // on first sentinel" from index 0 would be incorrect — the backward walk
-        // from root_history_index is the correct shape. Real roots never equal
-        // the empty-tree sentinel, so this never skips a valid root. Worst case
-        // (fully wrapped buffer) is unchanged; early tree life is much cheaper.
-        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
-        let mut i = self.root_history_index as usize;
-        for _ in 0..ROOT_HISTORY_SIZE {
-            let candidate = self.root_history[i];
-            if candidate == sentinel {
-                break;
-            }
-            if candidate == *root {
+        for candidate in self.root_history.iter() {
+            if *candidate == *root {
                 return true;
             }
-            i = if i == 0 { ROOT_HISTORY_SIZE - 1 } else { i - 1 };
         }
         false
     }
@@ -511,29 +523,33 @@ pub struct NotePoolTreeSpl {
 impl NotePoolTreeSpl {
     /// Check if a root exists in the history.
     pub fn is_known_root(&self, root: &[u8; 32]) -> bool {
+        // Audit 06 L-02 / issue #16: scan the FULL circular buffer, skipping
+        // (not stopping at) sentinel slots. The schema-v2 migration of a V1
+        // ring that had wrapped preserves all 30 V1 slots as live roots while
+        // root_history_index points mid-ring; the remaining slots are
+        // sentinel-filled. A backward walk that breaks on the first sentinel
+        // orphans the live roots that sit after a sentinel in descending-ring
+        // order and wrongly rejects their (valid) claim codes — a liveness
+        // regression. A full scan is layout-independent (partial fill, full
+        // wrap, and migrated-from-wrapped-V1 all resolve correctly) and
+        // repairs already-migrated trees purely on the read path. Cost is
+        // ROOT_HISTORY_SIZE in-memory 32-byte compares — negligible.
+        //
+        // Soundness: the empty-tree sentinel is never a real stored root, so
+        // we reject it up front and never compare it against a slot. This
+        // means neither a sentinel query nor a sentinel-filled slot can ever
+        // produce a false positive.
+        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
+        if *root == sentinel {
+            return false;
+        }
         if *root == self.current_root {
             return true;
         }
-        // Audit 06 L-02: walk the circular buffer backward from the most recent
-        // write instead of scanning all ROOT_HISTORY_SIZE slots linearly.
-        // Unused slots hold the ZERO_HASHES sentinel; reaching one means we have
-        // scanned the entire filled region (newest -> oldest) and can stop. The
-        // buffer fills from index 1 (increment-then-write), so a forward "break
-        // on first sentinel" from index 0 would be incorrect — the backward walk
-        // from root_history_index is the correct shape. Real roots never equal
-        // the empty-tree sentinel, so this never skips a valid root. Worst case
-        // (fully wrapped buffer) is unchanged; early tree life is much cheaper.
-        let sentinel = ZERO_HASHES[MERKLE_DEPTH];
-        let mut i = self.root_history_index as usize;
-        for _ in 0..ROOT_HISTORY_SIZE {
-            let candidate = self.root_history[i];
-            if candidate == sentinel {
-                break;
-            }
-            if candidate == *root {
+        for candidate in self.root_history.iter() {
+            if *candidate == *root {
                 return true;
             }
-            i = if i == 0 { ROOT_HISTORY_SIZE - 1 } else { i - 1 };
         }
         false
     }
@@ -602,4 +618,168 @@ impl CreditNoteSpl {
         + 32   // salt
         + 8    // created_at
         + 32;  // mint
+}
+
+#[cfg(test)]
+mod is_known_root_tests {
+    //! Issue #16 — L-02 regression: is_known_root skips valid roots on
+    //! migrated+wrapped root buffers. These tests cover all four tree
+    //! variants (MerkleTreeAccount, NotePoolTree, MerkleTreeSpl,
+    //! NotePoolTreeSpl) against three layouts plus a soundness guard.
+    use super::*;
+
+    const SENTINEL: [u8; 32] = ZERO_HASHES[MERKLE_DEPTH];
+
+    /// A distinct, definitely-non-sentinel root. First byte 0xA0 can never
+    /// collide with the sentinel (ZERO_HASHES[MERKLE_DEPTH][0] == 33).
+    fn root(n: u16) -> [u8; 32] {
+        let mut r = [0u8; 32];
+        r[0] = 0xA0;
+        r[1] = (n >> 8) as u8;
+        r[2] = (n & 0xff) as u8;
+        r
+    }
+
+    /// Schema-v2 migration output for a V1 ring that had WRAPPED: the 30 V1
+    /// slots (0..30) all hold distinct live roots, slots 30..256 are
+    /// sentinel-filled, and root_history_index points mid-ring. This is the
+    /// exact state described in issue #16's deterministic reproduction.
+    fn migrated_wrapped_history() -> [[u8; 32]; ROOT_HISTORY_SIZE] {
+        let mut h = [SENTINEL; ROOT_HISTORY_SIZE];
+        for i in 0..ROOT_HISTORY_SIZE_V1 {
+            h[i] = root(i as u16);
+        }
+        h
+    }
+
+    /// Fresh native-V2 tree, partially filled. Writes increment-then-write
+    /// from index 1, so slot 0 stays sentinel and slots 1..=k are live.
+    fn partial_fill_history(k: usize) -> [[u8; 32]; ROOT_HISTORY_SIZE] {
+        let mut h = [SENTINEL; ROOT_HISTORY_SIZE];
+        for i in 1..=k {
+            h[i] = root(i as u16);
+        }
+        h
+    }
+
+    /// Fully-wrapped buffer: every one of the 256 slots holds a live root.
+    fn fully_wrapped_history() -> [[u8; 32]; ROOT_HISTORY_SIZE] {
+        let mut h = [SENTINEL; ROOT_HISTORY_SIZE];
+        for i in 0..ROOT_HISTORY_SIZE {
+            h[i] = root(i as u16);
+        }
+        h
+    }
+
+    /// Run the full scenario matrix against one tree variant. `$ctor` is a
+    /// closure `(index, current_root, history) -> Box<TreeType>`.
+    macro_rules! is_known_root_suite {
+        ($name:ident, $ctor:expr) => {
+            #[test]
+            fn $name() {
+                let ctor = $ctor;
+
+                // ── Scenario 1: migrated-from-wrapped-V1 (the #16 repro) ──
+                // index points mid-ring at slot 5; current_root is the most
+                // recent live root. Slot 20 sits AFTER a sentinel in
+                // descending-ring order (5->0->wrap->255=sentinel), so the
+                // backward-walk-break version never examines it.
+                let tree = ctor(5u32, root(5), migrated_wrapped_history());
+                assert!(
+                    tree.is_known_root(&root(20)),
+                    "{}: live root orphaned after sentinel (slot 20) must be known",
+                    stringify!($name)
+                );
+                assert!(
+                    tree.is_known_root(&root(6)),
+                    "{}: live root in slot 6 must be known",
+                    stringify!($name)
+                );
+                assert!(
+                    tree.is_known_root(&root(29)),
+                    "{}: live root in last V1 slot (29) must be known",
+                    stringify!($name)
+                );
+                assert!(
+                    tree.is_known_root(&root(0)),
+                    "{}: live root in slot 0 must be known",
+                    stringify!($name)
+                );
+                assert!(
+                    tree.is_known_root(&root(5)),
+                    "{}: current_root must be known",
+                    stringify!($name)
+                );
+                // Soundness: the sentinel is never a stored root.
+                assert!(
+                    !tree.is_known_root(&SENTINEL),
+                    "{}: sentinel must never match (soundness guard)",
+                    stringify!($name)
+                );
+                // Soundness: an unstored root is never known.
+                assert!(
+                    !tree.is_known_root(&root(99)),
+                    "{}: unstored root must not match",
+                    stringify!($name)
+                );
+
+                // ── Scenario 2: native-V2 partial fill (no regression) ──
+                let tree = ctor(10u32, root(10), partial_fill_history(10));
+                assert!(tree.is_known_root(&root(1)), "{}: partial slot 1", stringify!($name));
+                assert!(tree.is_known_root(&root(5)), "{}: partial slot 5", stringify!($name));
+                assert!(tree.is_known_root(&root(10)), "{}: partial current", stringify!($name));
+                assert!(!tree.is_known_root(&SENTINEL), "{}: partial sentinel", stringify!($name));
+                assert!(!tree.is_known_root(&root(50)), "{}: partial unstored", stringify!($name));
+
+                // ── Scenario 3: fully-wrapped (no regression) ──
+                let tree = ctor(100u32, root(100), fully_wrapped_history());
+                assert!(tree.is_known_root(&root(0)), "{}: wrapped slot 0", stringify!($name));
+                assert!(tree.is_known_root(&root(255)), "{}: wrapped slot 255", stringify!($name));
+                assert!(tree.is_known_root(&root(100)), "{}: wrapped current", stringify!($name));
+                assert!(!tree.is_known_root(&SENTINEL), "{}: wrapped sentinel", stringify!($name));
+            }
+        };
+    }
+
+    is_known_root_suite!(main_merkle_tree, |index, current, history| Box::new(
+        MerkleTreeAccount {
+            vault: Pubkey::default(),
+            next_index: 0,
+            root_history_index: index,
+            current_root: current,
+            root_history: history,
+            filled_subtrees: [[0u8; 32]; MERKLE_DEPTH],
+        }
+    ));
+
+    is_known_root_suite!(note_pool_tree, |index, current, history| Box::new(NotePoolTree {
+        vault: Pubkey::default(),
+        next_index: 0,
+        root_history_index: index,
+        current_root: current,
+        root_history: history,
+        filled_subtrees: [[0u8; 32]; MERKLE_DEPTH],
+    }));
+
+    is_known_root_suite!(merkle_tree_spl, |index, current, history| Box::new(MerkleTreeSpl {
+        vault: Pubkey::default(),
+        mint: Pubkey::default(),
+        next_index: 0,
+        root_history_index: index,
+        current_root: current,
+        root_history: history,
+        filled_subtrees: [[0u8; 32]; MERKLE_DEPTH],
+    }));
+
+    is_known_root_suite!(note_pool_tree_spl, |index, current, history| Box::new(
+        NotePoolTreeSpl {
+            vault: Pubkey::default(),
+            mint: Pubkey::default(),
+            next_index: 0,
+            root_history_index: index,
+            current_root: current,
+            root_history: history,
+            filled_subtrees: [[0u8; 32]; MERKLE_DEPTH],
+        }
+    ));
 }
