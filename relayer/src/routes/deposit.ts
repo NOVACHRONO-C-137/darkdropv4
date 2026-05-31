@@ -25,7 +25,8 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { config } from "../config";
-import { hasProcessedTx, markProcessed, unmarkProcessed } from "../processed-txs";
+import { hasProcessedNonce, markProcessed, unmarkProcessed } from "../processed-txs";
+import { verifyDepositTx, isValidNonce } from "../verify-deposit";
 
 const router = Router();
 
@@ -52,6 +53,8 @@ interface DepositRelayRequest {
   leaf: number[];           // 32 bytes
   amount: string;           // lamports as string
   depositTx: string;        // signature of the SOL transfer TX from user to relayer
+  payer: string;            // #19: declared source pubkey (base58) of the transfer
+  nonce: string;            // #19: per-deposit single-use nonce (64 hex), committed in the tx memo
 }
 
 router.post("/", async (req: Request, res: Response) => {
@@ -59,11 +62,14 @@ router.post("/", async (req: Request, res: Response) => {
     const body = req.body as DepositRelayRequest;
 
     // Validate required fields
-    if (!body.leaf || !body.amount || !body.depositTx) {
+    if (!body.leaf || !body.amount || !body.depositTx || !body.payer || !body.nonce) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
     if (body.leaf.length !== 32) return res.status(400).json({ error: "leaf must be 32 bytes" });
+    if (!isValidNonce(body.nonce)) {
+      return res.status(400).json({ error: "nonce must be 64 lowercase hex chars (32 bytes)" });
+    }
 
     let amount: bigint;
     try {
@@ -74,46 +80,32 @@ router.post("/", async (req: Request, res: Response) => {
     if (amount <= 0n) return res.status(400).json({ error: "Amount must be > 0" });
     if (amount > config.maxClaimAmount) return res.status(400).json({ error: "Amount exceeds relay limit" });
 
-    // C-01 FIX: Reject replayed deposit TX signatures (persistent across restarts)
-    if (hasProcessedTx(body.depositTx)) {
-      return res.status(409).json({ error: "Deposit TX already processed" });
+    // #19 (F3): replay is keyed on the single-use per-deposit nonce, persisted
+    // with NO TTL — a nonce can never be reused, so replay fails across any window.
+    if (hasProcessedNonce(body.nonce)) {
+      return res.status(409).json({ error: "Deposit nonce already used" });
     }
 
     const relayer: Keypair = req.app.locals.relayerKeypair;
     const connection = new Connection(config.rpcUrl, "confirmed");
 
-    // Verify the deposit TX transferred the correct amount to the relayer
-    const txInfo = await connection.getTransaction(body.depositTx, {
-      commitment: "confirmed",
-      maxSupportedTransactionVersion: 0,
+    // #19 (F3): bind the deposit to its source + shape. The depositTx must be a
+    // purpose-built deposit: exactly a System transfer from the declared `payer`
+    // to the relayer for EXACTLY `amount`, plus a memo committing the `nonce`.
+    // A tx that merely credited the relayer (airdrop / fee credit / mis-send)
+    // is rejected.
+    const verdict = await verifyDepositTx(connection, body.depositTx, {
+      payer: body.payer,
+      relayer: relayer.publicKey.toString(),
+      amount,
+      nonce: body.nonce,
     });
-
-    if (!txInfo) {
-      return res.status(400).json({ error: "Deposit TX not found or not confirmed" });
+    if (!verdict.ok) {
+      return res.status(400).json({ error: verdict.error });
     }
 
-    // Check that the relayer received at least `amount` lamports
-    const accountKeys = txInfo.transaction.message.getAccountKeys().staticAccountKeys;
-    const relayerIndex = accountKeys.findIndex(
-      (key) => key.toString() === relayer.publicKey.toString()
-    );
-
-    if (relayerIndex === -1) {
-      return res.status(400).json({ error: "Relayer not in deposit TX accounts" });
-    }
-
-    const preBalance = txInfo.meta?.preBalances[relayerIndex] ?? 0;
-    const postBalance = txInfo.meta?.postBalances[relayerIndex] ?? 0;
-    const received = BigInt(postBalance - preBalance);
-
-    if (received < amount) {
-      return res.status(400).json({
-        error: `Deposit TX transferred ${received} lamports, expected at least ${amount}`,
-      });
-    }
-
-    // Mark TX as processed BEFORE submitting on-chain (prevent concurrent replays)
-    markProcessed(body.depositTx);
+    // Mark nonce as used BEFORE submitting on-chain (prevent concurrent replays)
+    markProcessed(body.nonce, body.depositTx);
 
     // Build create_drop instruction with relayer as sender
     const vault = getVaultPDA();
@@ -151,8 +143,8 @@ router.post("/", async (req: Request, res: Response) => {
         commitment: "confirmed",
       });
     } catch (err) {
-      // On-chain TX failed — remove from processed set so user can retry
-      unmarkProcessed(body.depositTx);
+      // On-chain TX failed — free the nonce so the user can retry
+      unmarkProcessed(body.nonce);
       throw err;
     }
 

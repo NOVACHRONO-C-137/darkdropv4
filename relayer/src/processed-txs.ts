@@ -1,17 +1,24 @@
 /**
- * Persistent deposit TX tracker — survives relayer restarts.
- * Stores processed deposit TX signatures with timestamps.
- * Prunes entries older than 24 hours on each load/save cycle.
+ * Persistent single-use deposit-nonce tracker — survives relayer restarts.
+ *
+ * Issue #19 (F3): replay is keyed on the per-deposit NONCE (committed in the
+ * deposit tx's memo), not the bare tx signature, and entries NEVER expire.
+ * A nonce is single-use for all time, so a deposit can never be replayed —
+ * including across what used to be the 24h TTL window. (Removing the TTL is
+ * the fix; a settlement/dispute window can be arbitrarily long.)
+ *
+ * The stored value records the on-chain signature + first-seen timestamp for
+ * audit only; the KEY is the nonce.
  */
 
 import fs from "fs";
 import path from "path";
 
 const STORE_PATH = path.join(__dirname, "..", "data", "processed-deposits.json");
-const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface Entry {
-  ts: number; // unix ms
+  ts: number; // unix ms, first seen (audit only)
+  sig?: string; // deposit tx signature (audit only)
 }
 
 let cache: Record<string, Entry> = {};
@@ -31,16 +38,7 @@ function load() {
   } catch {
     cache = {};
   }
-  prune();
-}
-
-function prune() {
-  const cutoff = Date.now() - TTL_MS;
-  for (const sig of Object.keys(cache)) {
-    if (cache[sig].ts < cutoff) {
-      delete cache[sig];
-    }
-  }
+  // No pruning: nonces are single-use forever (issue #19 / F3).
 }
 
 function save() {
@@ -51,16 +49,19 @@ function save() {
 // Load on startup
 load();
 
-export function hasProcessedTx(sig: string): boolean {
-  return sig in cache;
+/** Has this deposit nonce been used before? */
+export function hasProcessedNonce(nonce: string): boolean {
+  return nonce in cache;
 }
 
-export function markProcessed(sig: string) {
-  cache[sig] = { ts: Date.now() };
+/** Mark a deposit nonce as used (optionally recording the tx signature). */
+export function markProcessed(nonce: string, sig?: string) {
+  cache[nonce] = { ts: Date.now(), sig };
   save();
 }
 
-export function unmarkProcessed(sig: string) {
-  delete cache[sig];
+/** Roll back a nonce if the on-chain relay TX failed, so the user can retry. */
+export function unmarkProcessed(nonce: string) {
+  delete cache[nonce];
   save();
 }
