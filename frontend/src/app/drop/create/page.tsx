@@ -697,7 +697,7 @@ export default function CreateDropPage() {
                       className="w-full text-sm font-mono"
                     />
                     <p className="mt-2 text-[10px] leading-relaxed text-[rgba(224,224,224,0.3)]">
-                      If set, the recipient must enter this password to claim. Enforced at the protocol level via ZK proof.
+                      If set, the recipient must enter this password to decrypt the claim code (client-side PBKDF2 + AES-256-GCM). Protection comes from the encrypted code, not the on-chain ZK proof — anyone who can decrypt the code can claim, so share it carefully.
                     </p>
                   </div>
                 </div>
