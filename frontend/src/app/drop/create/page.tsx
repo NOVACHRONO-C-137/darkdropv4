@@ -418,12 +418,26 @@ export default function CreateDropPage() {
         if (!relayerPubkey) throw new Error("Relayer not available");
 
         const { PublicKey: PK } = await import("@solana/web3.js");
+        // #19: per-deposit single-use nonce (32 bytes -> 64 lowercase hex),
+        // committed in an SPL Memo on the transfer. relayer/src/verify-deposit.ts
+        // requires the deposit tx to be EXACTLY [transfer, memo(nonce)] — no
+        // ComputeBudget, no extra ix, no address-lookup tables; memo content === nonce.
+        const nonce = Array.from(
+          crypto.getRandomValues(new Uint8Array(32)),
+          (b) => b.toString(16).padStart(2, "0")
+        ).join("");
         const transferIx = SystemProgram.transfer({
           fromPubkey: publicKey,
           toPubkey: new PK(relayerPubkey),
           lamports: Number(lamports),
         });
-        const transferTx = new Transaction().add(transferIx);
+        const memoIx = new TransactionInstruction({
+          programId: new PK("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
+          keys: [],
+          data: Buffer.from(nonce, "utf8"),
+        });
+        // EXACTLY two instructions: transfer + memo (anything else -> relayer 400).
+        const transferTx = new Transaction().add(transferIx, memoIx);
         const depositSig = await sendTransaction(transferTx, connection);
         await connection.confirmTransaction(depositSig, "confirmed");
 
@@ -439,6 +453,8 @@ export default function CreateDropPage() {
             amount: lamports.toString(),
             poolParams: Array.from(poolParams),
             depositTx: depositSig,
+            payer: publicKey.toBase58(), // #19: declared transfer source
+            nonce,                        // #19: single-use nonce, === the memo content
           }),
         });
         const result = await resp.json();
@@ -454,12 +470,26 @@ export default function CreateDropPage() {
         if (!relayerPubkey) throw new Error("Relayer not available");
 
         const { PublicKey: PK } = await import("@solana/web3.js");
+        // #19: per-deposit single-use nonce (32 bytes -> 64 lowercase hex),
+        // committed in an SPL Memo on the transfer. relayer/src/verify-deposit.ts
+        // requires the deposit tx to be EXACTLY [transfer, memo(nonce)] — no
+        // ComputeBudget, no extra ix, no address-lookup tables; memo content === nonce.
+        const nonce = Array.from(
+          crypto.getRandomValues(new Uint8Array(32)),
+          (b) => b.toString(16).padStart(2, "0")
+        ).join("");
         const transferIx = SystemProgram.transfer({
           fromPubkey: publicKey,
           toPubkey: new PK(relayerPubkey),
           lamports: Number(lamports),
         });
-        const transferTx = new Transaction().add(transferIx);
+        const memoIx = new TransactionInstruction({
+          programId: new PK("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
+          keys: [],
+          data: Buffer.from(nonce, "utf8"),
+        });
+        // EXACTLY two instructions: transfer + memo (anything else -> relayer 400).
+        const transferTx = new Transaction().add(transferIx, memoIx);
         const depositSig = await sendTransaction(transferTx, connection);
         await connection.confirmTransaction(depositSig, "confirmed");
 
@@ -472,6 +502,8 @@ export default function CreateDropPage() {
             leaf: Array.from(dropResult.leaf),
             amount: lamports.toString(),
             depositTx: depositSig,
+            payer: publicKey.toBase58(), // #19: declared transfer source
+            nonce,                        // #19: single-use nonce, === the memo content
           }),
         });
         const result = await resp.json();
