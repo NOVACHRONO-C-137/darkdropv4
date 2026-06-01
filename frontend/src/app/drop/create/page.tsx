@@ -6,6 +6,7 @@ import {
   Transaction,
   TransactionInstruction,
   SystemProgram,
+  ComputeBudgetProgram,
 } from "@solana/web3.js";
 import {
   getAssociatedTokenAddressSync,
@@ -51,13 +52,18 @@ import { randomFieldElement, bigintToBytes32BE } from "@/lib/crypto";
 type Stage = "input" | "confirming" | "done" | "error";
 type DepositMode = "direct" | "private" | "pool";
 
-// #19 (F3) gate: the relayer deposit endpoints (/api/relay/create-drop and
-// /create-drop-to-pool) now REQUIRE a per-deposit payer + nonce (committed as an
-// SPL Memo on the transfer). The frontend deposit client does NOT send these yet,
-// so the relayer-fronted SOL "private"/"pool" modes would be rejected (400).
-// Until the #19 frontend client lands, force SOL deposits to "direct" and hide
-// the relayer-fronted modes. Flip to true in the PR that adds the nonce/memo wiring.
-const SOL_RELAYER_DEPOSITS_ENABLED: boolean = false;
+// #19 (F3) gate for the relayer-fronted SOL deposit modes ("private"/"pool").
+// The relayer deposit endpoints (/api/relay/create-drop, /create-drop-to-pool)
+// REQUIRE a per-deposit payer + nonce (SPL Memo on the transfer, exactly 2 ix).
+// The frontend client that sends these is implemented (issue #38). false = SOL
+// forced to "direct" and the relayer-fronted modes hidden; true = enabled.
+// USDC and SOL-direct never route through this gate.
+//
+// ⚠️ ENABLED on the fix/issue-38-deposit-client branch for PR #40 PREVIEW TESTING
+// ONLY. Do NOT merge to main / production with this true until a real-wallet
+// deposit confirms the tx is exactly 2 instructions (no ComputeBudget / priority-fee
+// injection that would trip the relayer's strict 2-instruction rule).
+const SOL_RELAYER_DEPOSITS_ENABLED: boolean = true;
 type Asset = "sol" | "usdc";
 
 // sha256("global:create_drop")[0..8]
@@ -418,12 +424,31 @@ export default function CreateDropPage() {
         if (!relayerPubkey) throw new Error("Relayer not available");
 
         const { PublicKey: PK } = await import("@solana/web3.js");
+        // #19: per-deposit single-use nonce (32 bytes -> 64 lowercase hex),
+        // committed in an SPL Memo on the transfer. The relayer (verify-deposit.ts)
+        // requires exactly one transfer + one memo(nonce), TOLERATES benign
+        // ComputeBudget ixs (relayer fix #38), and rejects any other program / ALT.
+        const nonce = Array.from(
+          crypto.getRandomValues(new Uint8Array(32)),
+          (b) => b.toString(16).padStart(2, "0")
+        ).join("");
         const transferIx = SystemProgram.transfer({
           fromPubkey: publicKey,
           toPubkey: new PK(relayerPubkey),
           lamports: Number(lamports),
         });
-        const transferTx = new Transaction().add(transferIx);
+        const memoIx = new TransactionInstruction({
+          programId: new PK("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
+          keys: [],
+          data: Buffer.from(nonce, "utf8"),
+        });
+        // Defense-in-depth (#38): prepend explicit ComputeBudget ixs so the tx's
+        // instruction set is deterministic — wallets are less likely to auto-inject
+        // priority-fee ixs when they are already present. The relayer tolerates
+        // ComputeBudget ixs regardless (verify-deposit.ts) — that's the real fix.
+        const cuLimitIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 50_000 });
+        const cuPriceIx = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 });
+        const transferTx = new Transaction().add(cuLimitIx, cuPriceIx, transferIx, memoIx);
         const depositSig = await sendTransaction(transferTx, connection);
         await connection.confirmTransaction(depositSig, "confirmed");
 
@@ -439,6 +464,8 @@ export default function CreateDropPage() {
             amount: lamports.toString(),
             poolParams: Array.from(poolParams),
             depositTx: depositSig,
+            payer: publicKey.toBase58(), // #19: declared transfer source
+            nonce,                        // #19: single-use nonce, === the memo content
           }),
         });
         const result = await resp.json();
@@ -454,12 +481,31 @@ export default function CreateDropPage() {
         if (!relayerPubkey) throw new Error("Relayer not available");
 
         const { PublicKey: PK } = await import("@solana/web3.js");
+        // #19: per-deposit single-use nonce (32 bytes -> 64 lowercase hex),
+        // committed in an SPL Memo on the transfer. The relayer (verify-deposit.ts)
+        // requires exactly one transfer + one memo(nonce), TOLERATES benign
+        // ComputeBudget ixs (relayer fix #38), and rejects any other program / ALT.
+        const nonce = Array.from(
+          crypto.getRandomValues(new Uint8Array(32)),
+          (b) => b.toString(16).padStart(2, "0")
+        ).join("");
         const transferIx = SystemProgram.transfer({
           fromPubkey: publicKey,
           toPubkey: new PK(relayerPubkey),
           lamports: Number(lamports),
         });
-        const transferTx = new Transaction().add(transferIx);
+        const memoIx = new TransactionInstruction({
+          programId: new PK("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
+          keys: [],
+          data: Buffer.from(nonce, "utf8"),
+        });
+        // Defense-in-depth (#38): prepend explicit ComputeBudget ixs so the tx's
+        // instruction set is deterministic — wallets are less likely to auto-inject
+        // priority-fee ixs when they are already present. The relayer tolerates
+        // ComputeBudget ixs regardless (verify-deposit.ts) — that's the real fix.
+        const cuLimitIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 50_000 });
+        const cuPriceIx = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 });
+        const transferTx = new Transaction().add(cuLimitIx, cuPriceIx, transferIx, memoIx);
         const depositSig = await sendTransaction(transferTx, connection);
         await connection.confirmTransaction(depositSig, "confirmed");
 
@@ -472,6 +518,8 @@ export default function CreateDropPage() {
             leaf: Array.from(dropResult.leaf),
             amount: lamports.toString(),
             depositTx: depositSig,
+            payer: publicKey.toBase58(), // #19: declared transfer source
+            nonce,                        // #19: single-use nonce, === the memo content
           }),
         });
         const result = await resp.json();
