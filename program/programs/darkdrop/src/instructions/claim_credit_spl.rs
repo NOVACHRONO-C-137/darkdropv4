@@ -10,7 +10,7 @@ use crate::poseidon::{poseidon_hash, pubkey_to_field};
 /// CreditNoteSpl that the recipient (or someone they share with) later
 /// withdraws against via `withdraw_credit_spl`.
 ///
-/// Structurally mirrors `claim_credit.rs`. Same V2 verifier, same 5
+/// Structurally mirrors `claim_credit.rs`. Same V2 verifier, same 4
 /// public inputs in the same order, same `pubkey_to_field` recipient
 /// hashing, same `Poseidon(commitment, salt)` re-randomization
 /// (M-01-NEW fix), same global `Vault.total_claims` bump.
@@ -30,11 +30,10 @@ use crate::poseidon::{poseidon_hash, pubkey_to_field};
 /// The amount is a private input in the ZK proof; only the Poseidon
 /// commitment is stored.
 ///
-/// The `inputs` parameter is the same opaque 96-byte vector as the SOL
-/// path:
+/// The `inputs` parameter is the same opaque 64-byte vector as the SOL
+/// path (issue #20: the former [64..96] password_hash was removed):
 ///   [0..32]  merkle_root
 ///   [32..64] amount_commitment
-///   [64..96] password_hash
 pub fn handle_claim_credit_spl(
     ctx: Context<ClaimCreditSpl>,
     nullifier_hash: [u8; 32],
@@ -43,11 +42,11 @@ pub fn handle_claim_credit_spl(
     salt: [u8; 32],
 ) -> Result<()> {
     // Parse opaque inputs — same layout as claim_credit.rs.
-    require!(inputs.len() == 96, DarkDropError::InvalidInputLength);
+    // (issue #20: password_hash removed, 96 -> 64 bytes)
+    require!(inputs.len() == 64, DarkDropError::InvalidInputLength);
 
     let merkle_root: [u8; 32] = inputs[0..32].try_into().unwrap();
     let amount_commitment: [u8; 32] = inputs[32..64].try_into().unwrap();
-    let password_hash: [u8; 32] = inputs[64..96].try_into().unwrap();
 
     // Validate merkle root against the per-mint tree's root history.
     let tree = ctx.accounts.merkle_tree_spl.load()?;
@@ -64,13 +63,12 @@ pub fn handle_claim_credit_spl(
     // is audited code we choose not to touch).
     let recipient_hash = pubkey_to_field(&ctx.accounts.recipient.key());
 
-    // Public inputs — 5 elements, same order as V2 verifier expects.
-    let public_inputs: [[u8; 32]; 5] = [
+    // Public inputs — 4 elements, same order as V2 verifier expects.
+    let public_inputs: [[u8; 32]; 4] = [
         merkle_root,
         nullifier_hash,
         recipient_hash,
         amount_commitment,
-        password_hash,
     ];
 
     verify_proof_v2(&proof, &public_inputs)?;

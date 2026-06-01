@@ -88,7 +88,7 @@ interface CreditSplClaimRequest {
   proof: { proofA: number[]; proofB: number[]; proofC: number[] };
   nullifierHash: number[]; // 32 bytes
   recipient: string;
-  inputs: number[]; // 96 bytes: merkle_root || amount_commitment || password_hash
+  inputs: number[]; // 64 bytes: merkle_root || amount_commitment (password_hash removed, #20)
   salt: number[]; // 32 bytes
 }
 
@@ -106,7 +106,7 @@ router.post("/claim", async (req: Request, res: Response) => {
     ) {
       return res.status(400).json({ error: "Missing required fields" });
     }
-    if (body.inputs.length !== 96) return res.status(400).json({ error: "inputs must be 96 bytes" });
+    if (body.inputs.length !== 64) return res.status(400).json({ error: "inputs must be 64 bytes" });
     if (body.salt.length !== 32) return res.status(400).json({ error: "salt must be 32 bytes" });
     if (body.nullifierHash.length !== 32) {
       return res.status(400).json({ error: "nullifierHash must be 32 bytes" });
@@ -116,7 +116,6 @@ router.post("/claim", async (req: Request, res: Response) => {
     const inputsBuf = Buffer.from(body.inputs);
     const merkleRootBigint = bytes32ToBigInt(inputsBuf, 0);
     const amountCommitBigint = bytes32ToBigInt(inputsBuf, 32);
-    const passwordHashBigint = bytes32ToBigInt(inputsBuf, 64);
     const nullifierHashBigint = bytes32ToBigInt(Buffer.from(body.nullifierHash));
 
     const mint = new PublicKey(body.mint);
@@ -127,7 +126,7 @@ router.post("/claim", async (req: Request, res: Response) => {
       body.proof.proofA,
       body.proof.proofB,
       body.proof.proofC,
-      [merkleRootBigint, nullifierHashBigint, recipientField, amountCommitBigint, passwordHashBigint],
+      [merkleRootBigint, nullifierHashBigint, recipientField, amountCommitBigint],
     );
     if (!valid) {
       return res.status(400).json({ error: "Invalid ZK proof" });

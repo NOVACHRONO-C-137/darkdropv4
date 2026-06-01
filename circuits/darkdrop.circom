@@ -14,8 +14,15 @@ include "./lib/merkle_tree.circom";
 //   - Leaf identity hidden (Merkle proof reveals nothing about which leaf)
 //   - Amount hidden (Poseidon commitment hides value)
 //   - Nullifier prevents double-claim without linking to leaf
-//   - Recipient bound to proof (prevents front-running)
-//   - Optional password protection (ForceEqualIfEnabled)
+//   - Recipient bound to proof injectively via Poseidon(hi, lo) (prevents front-running)
+//
+// Password protection is NOT enforced in-circuit. Password-protected drops are
+// protected SOLELY by client-side claim-code encryption (PBKDF2 + AES-256-GCM,
+// see frontend/src/lib/claim-code.ts). The former in-circuit `password_hash`
+// gate (issue #20 / F5) was removed: it was committed neither into the leaf nor
+// on-chain, so any claimer holding the leaf preimage could set password_hash = 0
+// to disable it — it provided no protection. Password secrecy lives entirely in
+// the encrypted claim code, never in the proof.
 //
 // Estimated constraints at depth 20: ~5,200
 
@@ -28,14 +35,14 @@ template DarkDropClaim(merkle_depth) {
     signal input nullifier;
     signal input merkle_path[merkle_depth];
     signal input merkle_indices[merkle_depth];
-    signal input password;                        // 0 if no password
+    signal input recipient_hi;                    // recipient pubkey high 128 bits
+    signal input recipient_lo;                    // recipient pubkey low 128 bits
 
     // === PUBLIC INPUTS (visible on-chain, verified by program) ===
     signal input merkle_root;
     signal input nullifier_hash;
-    signal input recipient;                       // recipient pubkey (bound to proof)
+    signal input recipient;                       // recipient_hash = Poseidon(recipient_hi, recipient_lo)
     signal input amount_commitment;               // Poseidon(amount, blinding_factor)
-    signal input password_hash;                   // Poseidon(password), 0 if no password
 
     // === CONSTRAINT 1: Leaf construction ===
     // Prove I know the preimage of a valid leaf
@@ -82,30 +89,19 @@ template DarkDropClaim(merkle_depth) {
     is_zero.in <== amount;
     is_zero.out === 0; // amount is NOT zero
 
-    // === CONSTRAINT 6: Password verification (optional) ===
-    // If password_hash != 0, prove I know the password
-    // If password_hash == 0, password is unchecked (any value accepted)
-    component pwd_hash = Poseidon(1);
-    pwd_hash.inputs[0] <== password;
-
-    component pwd_hash_is_zero = IsZero();
-    pwd_hash_is_zero.in <== password_hash;
-
-    // enabled = 1 when password_hash != 0 (password protection is active)
-    signal pwd_enabled;
-    pwd_enabled <== 1 - pwd_hash_is_zero.out;
-
-    component pwd_check = ForceEqualIfEnabled();
-    pwd_check.enabled <== pwd_enabled;
-    pwd_check.in[0] <== pwd_hash.out;
-    pwd_check.in[1] <== password_hash;
-
-    // === CONSTRAINT 7: Bind proof to recipient ===
-    // Prevents front-running: proof is only valid for this specific recipient
-    // Square ensures recipient is included in the constraint system
-    signal recipient_sq <== recipient * recipient;
+    // === CONSTRAINT 6: Bind proof to recipient (injective) ===
+    // Prevents front-running: the proof is only valid for this exact recipient.
+    // recipient (public) === Poseidon(recipient_hi, recipient_lo). This mirrors the
+    // V3 note-pool binding (note_pool.circom) and replaces the earlier
+    // `recipient * recipient`, which was non-injective: x^2 == (p - x)^2, so a proof
+    // for r also satisfied p - r. Poseidon(hi, lo) is injective over the witness,
+    // removing the ± ambiguity (issue #20 / F6).
+    component recipient_hasher = Poseidon(2);
+    recipient_hasher.inputs[0] <== recipient_hi;
+    recipient_hasher.inputs[1] <== recipient_lo;
+    recipient === recipient_hasher.out;
 }
 
 // Instantiate with depth 20 (supports ~1M drops)
 // V2: amount is now PRIVATE — not exposed to verifier. Still constrained by leaf hash, commitment, range check.
-component main {public [merkle_root, nullifier_hash, recipient, amount_commitment, password_hash]} = DarkDropClaim(20);
+component main {public [merkle_root, nullifier_hash, recipient, amount_commitment]} = DarkDropClaim(20);

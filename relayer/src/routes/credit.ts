@@ -62,7 +62,7 @@ interface CreditClaimRequest {
   };
   nullifierHash: number[];    // 32 bytes
   recipient: string;          // base58 pubkey
-  inputs: number[];           // 96 bytes: merkle_root(32) + commitment(32) + seed(32)
+  inputs: number[];           // 64 bytes: merkle_root(32) + commitment(32) (password_hash removed, #20)
   salt: number[];             // 32 bytes: random salt for commitment re-randomization
 }
 
@@ -73,23 +73,22 @@ router.post("/claim", async (req: Request, res: Response) => {
     if (!body.proof?.proofA || !body.nullifierHash || !body.recipient || !body.inputs || !body.salt) {
       return res.status(400).json({ error: "Missing required fields" });
     }
-    if (body.inputs.length !== 96) return res.status(400).json({ error: "inputs must be 96 bytes" });
+    if (body.inputs.length !== 64) return res.status(400).json({ error: "inputs must be 64 bytes" });
     if (body.salt.length !== 32) return res.status(400).json({ error: "salt must be 32 bytes" });
 
     // Pre-validate ZK proof off-chain before spending gas
-    // inputs = merkle_root(32) + amount_commitment(32) + password_hash(32)
+    // inputs = merkle_root(32) + amount_commitment(32)  (password_hash removed, #20)
     const inputsBuf = Buffer.from(body.inputs);
     const merkleRootBigint = bytes32ToBigInt(inputsBuf, 0);
     const amountCommitBigint = bytes32ToBigInt(inputsBuf, 32);
-    const passwordHashBigint = bytes32ToBigInt(inputsBuf, 64);
     const nullifierHashBigint = bytes32ToBigInt(Buffer.from(body.nullifierHash));
     const recipientPubkey = new PublicKey(body.recipient);
     const recipientField = await pubkeyToField(recipientPubkey.toBytes());
 
-    // V2 public inputs order: [merkle_root, nullifier_hash, recipient_hash, amount_commitment, password_hash]
+    // V2 public inputs order: [merkle_root, nullifier_hash, recipient_hash, amount_commitment]
     const valid = await verifyClaimProofV2(
       body.proof.proofA, body.proof.proofB, body.proof.proofC,
-      [merkleRootBigint, nullifierHashBigint, recipientField, amountCommitBigint, passwordHashBigint],
+      [merkleRootBigint, nullifierHashBigint, recipientField, amountCommitBigint],
     );
     if (!valid) {
       return res.status(400).json({ error: "Invalid ZK proof" });

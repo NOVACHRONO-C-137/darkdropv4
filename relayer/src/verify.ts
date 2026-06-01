@@ -125,7 +125,8 @@ export async function verifyClaimProofV1(
  * Verify a V2 claim_credit proof off-chain.
  *
  * Public inputs order (from circuit + on-chain claim_credit.rs):
- *   [merkle_root, nullifier_hash, recipient_hash, amount_commitment, password_hash]
+ *   [merkle_root, nullifier_hash, recipient_hash, amount_commitment]
+ *   (issue #20: the password_hash public input was removed)
  */
 /**
  * Verify a credit note commitment opening off-chain.

@@ -50,6 +50,14 @@ import { randomFieldElement, bigintToBytes32BE } from "@/lib/crypto";
 
 type Stage = "input" | "confirming" | "done" | "error";
 type DepositMode = "direct" | "private" | "pool";
+
+// #19 (F3) gate: the relayer deposit endpoints (/api/relay/create-drop and
+// /create-drop-to-pool) now REQUIRE a per-deposit payer + nonce (committed as an
+// SPL Memo on the transfer). The frontend deposit client does NOT send these yet,
+// so the relayer-fronted SOL "private"/"pool" modes would be rejected (400).
+// Until the #19 frontend client lands, force SOL deposits to "direct" and hide
+// the relayer-fronted modes. Flip to true in the PR that adds the nonce/memo wiring.
+const SOL_RELAYER_DEPOSITS_ENABLED: boolean = false;
 type Asset = "sol" | "usdc";
 
 // sha256("global:create_drop")[0..8]
@@ -120,8 +128,9 @@ export default function CreateDropPage() {
       setRelayerOnline(online);
       // Auto-select default deposit mode for SOL only. USDC always forces
       // "direct" because relayer-fronted SPL deposits / SPL pool are not
-      // shipped yet.
-      setDepositMode(online ? "private" : "direct");
+      // shipped yet. #19 gate: also stay "direct" until the relayer-fronted SOL
+      // modes have a frontend nonce/memo client.
+      setDepositMode(SOL_RELAYER_DEPOSITS_ENABLED && online ? "private" : "direct");
     });
   }, []);
 
@@ -170,8 +179,9 @@ export default function CreateDropPage() {
       setDepositMode("direct");
       setEnableRevoke(false);
     } else if (asset === "sol") {
-      // Restore relayer-aware default if relayer is up.
-      setDepositMode(relayerOnline ? "private" : "direct");
+      // Restore relayer-aware default if relayer is up. #19 gate: stays "direct"
+      // until the relayer-fronted SOL modes have a frontend nonce/memo client.
+      setDepositMode(SOL_RELAYER_DEPOSITS_ENABLED && relayerOnline ? "private" : "direct");
     }
   }, [asset, relayerOnline]);
 
@@ -351,6 +361,14 @@ export default function CreateDropPage() {
     }
     if (depositMode === "pool" && !relayerOnline) {
       setError("Max privacy mode requires the relayer to be online.");
+      return;
+    }
+    if (!SOL_RELAYER_DEPOSITS_ENABLED && depositMode !== "direct") {
+      // #19 gate (defense in depth): the relayer-fronted SOL modes need a
+      // per-deposit nonce/memo the frontend doesn't send yet. The UI hides these
+      // modes; this guard ensures a stale selection can never POST to the relayer.
+      setDepositMode("direct");
+      setError("Private / Max-Privacy SOL deposits are temporarily disabled — switched to direct. Please retry.");
       return;
     }
 
@@ -697,7 +715,7 @@ export default function CreateDropPage() {
                       className="w-full text-sm font-mono"
                     />
                     <p className="mt-2 text-[10px] leading-relaxed text-[rgba(224,224,224,0.3)]">
-                      If set, the recipient must enter this password to claim. Enforced at the protocol level via ZK proof.
+                      If set, the recipient must enter this password to decrypt the claim code (client-side PBKDF2 + AES-256-GCM). Protection comes from the encrypted code, not the on-chain ZK proof — anyone who can decrypt the code can claim, so share it carefully.
                     </p>
                   </div>
                 </div>
@@ -749,6 +767,10 @@ export default function CreateDropPage() {
                         </p>
                       </div>
                     </button>
+                    {/* #19 gate: relayer-fronted SOL deposit modes are hidden until the
+                        frontend sends the per-deposit payer + nonce/memo the relayer requires. */}
+                    {SOL_RELAYER_DEPOSITS_ENABLED && (
+                    <>
                     <button
                       type="button"
                       onClick={() => relayerOnline && !enableRevoke && setDepositMode("private")}
@@ -807,6 +829,8 @@ export default function CreateDropPage() {
                         </p>
                       </div>
                     </button>
+                    </>
+                    )}
                   </div>
                 </div>
 

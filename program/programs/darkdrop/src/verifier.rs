@@ -51,7 +51,7 @@ fn require_canonical_inputs(public_inputs: &[[u8; 32]]) -> Result<()> {
 // circuit source was absent and could not be audited. V2/V3 verifiers below
 // are unaffected; they reuse the shared alpha/beta/gamma ceremony params.
 
-/// Verify a Groth16 proof against the V2 verification key (5 public inputs).
+/// Verify a Groth16 proof against the V2 verification key (4 public inputs).
 /// Used by `claim_credit` — amount is private, not a public input.
 ///
 /// Public inputs order (V2):
@@ -59,10 +59,13 @@ fn require_canonical_inputs(public_inputs: &[[u8; 32]]) -> Result<()> {
 ///   [1] nullifier_hash
 ///   [2] recipient
 ///   [3] amount_commitment
-///   [4] password_hash
+///
+/// The former `[4] password_hash` input was removed in issue #20: the in-circuit
+/// password gate was vacuous (claimer-chosen, bound to nothing), so it was deleted
+/// from circuits/darkdrop.circom. Password protection is solely claim-code encryption.
 pub fn verify_proof_v2(
     proof: &ProofData,
-    public_inputs: &[[u8; 32]; 5],
+    public_inputs: &[[u8; 32]; 4],
 ) -> Result<()> {
     // Audit F1 (#17): reject non-canonical public inputs before verification.
     require_canonical_inputs(public_inputs)?;
