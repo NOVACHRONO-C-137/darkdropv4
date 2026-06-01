@@ -51,13 +51,18 @@ import { randomFieldElement, bigintToBytes32BE } from "@/lib/crypto";
 type Stage = "input" | "confirming" | "done" | "error";
 type DepositMode = "direct" | "private" | "pool";
 
-// #19 (F3) gate: the relayer deposit endpoints (/api/relay/create-drop and
-// /create-drop-to-pool) now REQUIRE a per-deposit payer + nonce (committed as an
-// SPL Memo on the transfer). The frontend deposit client does NOT send these yet,
-// so the relayer-fronted SOL "private"/"pool" modes would be rejected (400).
-// Until the #19 frontend client lands, force SOL deposits to "direct" and hide
-// the relayer-fronted modes. Flip to true in the PR that adds the nonce/memo wiring.
-const SOL_RELAYER_DEPOSITS_ENABLED: boolean = false;
+// #19 (F3) gate for the relayer-fronted SOL deposit modes ("private"/"pool").
+// The relayer deposit endpoints (/api/relay/create-drop, /create-drop-to-pool)
+// REQUIRE a per-deposit payer + nonce (SPL Memo on the transfer, exactly 2 ix).
+// The frontend client that sends these is implemented (issue #38). false = SOL
+// forced to "direct" and the relayer-fronted modes hidden; true = enabled.
+// USDC and SOL-direct never route through this gate.
+//
+// ⚠️ ENABLED on the fix/issue-38-deposit-client branch for PR #40 PREVIEW TESTING
+// ONLY. Do NOT merge to main / production with this true until a real-wallet
+// deposit confirms the tx is exactly 2 instructions (no ComputeBudget / priority-fee
+// injection that would trip the relayer's strict 2-instruction rule).
+const SOL_RELAYER_DEPOSITS_ENABLED: boolean = true;
 type Asset = "sol" | "usdc";
 
 // sha256("global:create_drop")[0..8]
