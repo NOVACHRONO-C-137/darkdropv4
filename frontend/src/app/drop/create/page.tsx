@@ -6,6 +6,7 @@ import {
   Transaction,
   TransactionInstruction,
   SystemProgram,
+  ComputeBudgetProgram,
 } from "@solana/web3.js";
 import {
   getAssociatedTokenAddressSync,
@@ -424,9 +425,9 @@ export default function CreateDropPage() {
 
         const { PublicKey: PK } = await import("@solana/web3.js");
         // #19: per-deposit single-use nonce (32 bytes -> 64 lowercase hex),
-        // committed in an SPL Memo on the transfer. relayer/src/verify-deposit.ts
-        // requires the deposit tx to be EXACTLY [transfer, memo(nonce)] — no
-        // ComputeBudget, no extra ix, no address-lookup tables; memo content === nonce.
+        // committed in an SPL Memo on the transfer. The relayer (verify-deposit.ts)
+        // requires exactly one transfer + one memo(nonce), TOLERATES benign
+        // ComputeBudget ixs (relayer fix #38), and rejects any other program / ALT.
         const nonce = Array.from(
           crypto.getRandomValues(new Uint8Array(32)),
           (b) => b.toString(16).padStart(2, "0")
@@ -441,8 +442,13 @@ export default function CreateDropPage() {
           keys: [],
           data: Buffer.from(nonce, "utf8"),
         });
-        // EXACTLY two instructions: transfer + memo (anything else -> relayer 400).
-        const transferTx = new Transaction().add(transferIx, memoIx);
+        // Defense-in-depth (#38): prepend explicit ComputeBudget ixs so the tx's
+        // instruction set is deterministic — wallets are less likely to auto-inject
+        // priority-fee ixs when they are already present. The relayer tolerates
+        // ComputeBudget ixs regardless (verify-deposit.ts) — that's the real fix.
+        const cuLimitIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 50_000 });
+        const cuPriceIx = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 });
+        const transferTx = new Transaction().add(cuLimitIx, cuPriceIx, transferIx, memoIx);
         const depositSig = await sendTransaction(transferTx, connection);
         await connection.confirmTransaction(depositSig, "confirmed");
 
@@ -476,9 +482,9 @@ export default function CreateDropPage() {
 
         const { PublicKey: PK } = await import("@solana/web3.js");
         // #19: per-deposit single-use nonce (32 bytes -> 64 lowercase hex),
-        // committed in an SPL Memo on the transfer. relayer/src/verify-deposit.ts
-        // requires the deposit tx to be EXACTLY [transfer, memo(nonce)] — no
-        // ComputeBudget, no extra ix, no address-lookup tables; memo content === nonce.
+        // committed in an SPL Memo on the transfer. The relayer (verify-deposit.ts)
+        // requires exactly one transfer + one memo(nonce), TOLERATES benign
+        // ComputeBudget ixs (relayer fix #38), and rejects any other program / ALT.
         const nonce = Array.from(
           crypto.getRandomValues(new Uint8Array(32)),
           (b) => b.toString(16).padStart(2, "0")
@@ -493,8 +499,13 @@ export default function CreateDropPage() {
           keys: [],
           data: Buffer.from(nonce, "utf8"),
         });
-        // EXACTLY two instructions: transfer + memo (anything else -> relayer 400).
-        const transferTx = new Transaction().add(transferIx, memoIx);
+        // Defense-in-depth (#38): prepend explicit ComputeBudget ixs so the tx's
+        // instruction set is deterministic — wallets are less likely to auto-inject
+        // priority-fee ixs when they are already present. The relayer tolerates
+        // ComputeBudget ixs regardless (verify-deposit.ts) — that's the real fix.
+        const cuLimitIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 50_000 });
+        const cuPriceIx = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 });
+        const transferTx = new Transaction().add(cuLimitIx, cuPriceIx, transferIx, memoIx);
         const depositSig = await sendTransaction(transferTx, connection);
         await connection.confirmTransaction(depositSig, "confirmed");
 
