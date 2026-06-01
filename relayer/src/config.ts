@@ -65,3 +65,28 @@ export const config = {
   v2CreditSplClaimCu: parseCu("V2_CREDIT_SPL_CLAIM_CU", process.env.V2_CREDIT_SPL_CLAIM_CU, "400000"),
   v3PoolClaimCu: parseCu("V3_POOL_CLAIM_CU", process.env.V3_POOL_CLAIM_CU, "400000"),
 };
+
+// ── CORS allow-list ───────────────────────────────────────────────────────────
+// A fund-fronting relayer keeps a TIGHT allow-list — no `*`, no `origin: true`,
+// no blanket `*.vercel.app`. Exactly two things are allowed:
+//   1. config.corsOrigin — the env-configured frontend origin (CORS_ORIGIN;
+//      https://darkdrop.app in prod, http://localhost:3000 dev default).
+//   2. THIS project's Vercel BRANCH-preview URLs only: project "darkdropv4",
+//      team slug "generalhitobusiness-3091s-projects".
+// Anchored ^…$, https-only, no ports/paths/extra subdomains; the branch-slug
+// segment is [a-z0-9-]+ (Vercel lowercases/sanitizes branch names). Example:
+//   https://darkdropv4-git-fix-issue-38-deposit-client-generalhitobusiness-3091s-projects.vercel.app
+export const CORS_PREVIEW_PATTERN =
+  /^https:\/\/darkdropv4-git-[a-z0-9-]+-generalhitobusiness-3091s-projects\.vercel\.app$/;
+
+/**
+ * CORS origin decision used by the `cors` middleware in index.ts.
+ * A missing Origin (undefined) is a non-browser / same-origin request — CORS
+ * does not gate those (not a cross-site browser threat), so allow. Otherwise
+ * allow only the configured origin or a scoped preview URL; reject everything else.
+ */
+export function isAllowedCorsOrigin(origin: string | undefined): boolean {
+  if (!origin) return true;
+  if (origin === config.corsOrigin) return true;
+  return CORS_PREVIEW_PATTERN.test(origin);
+}

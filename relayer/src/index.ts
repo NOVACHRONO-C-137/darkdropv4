@@ -14,7 +14,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import cors from "cors";
 import { Keypair } from "@solana/web3.js";
-import { config } from "./config";
+import { config, isAllowedCorsOrigin, CORS_PREVIEW_PATTERN } from "./config";
 import { loadRelayerKeypair } from "./keypair";
 import claimRouter from "./routes/claim";
 import depositRouter from "./routes/deposit";
@@ -38,7 +38,14 @@ try {
 app.locals.relayerKeypair = relayerKeypair;
 
 app.set("trust proxy", 1);
-app.use(cors({ origin: config.corsOrigin }));
+// Tight CORS allow-list: the env-configured origin + this project's scoped Vercel
+// branch previews only (see isAllowedCorsOrigin). callback(null, false) sets no
+// Access-Control-Allow-Origin header, so the browser blocks disallowed origins.
+app.use(
+  cors({
+    origin: (origin, callback) => callback(null, isAllowedCorsOrigin(origin)),
+  })
+);
 app.use(express.json({ limit: "10kb" }));
 
 // Rate limiting
@@ -72,6 +79,6 @@ app.listen(config.port, () => {
   console.log(`DarkDrop V4 Relayer running on port ${config.port}`);
   console.log(`RPC: ${config.rpcUrl}`);
   console.log(`Fee: ${config.feeRateBps} bps`);
-  console.log(`CORS: ${config.corsOrigin}`);
+  console.log(`CORS: ${config.corsOrigin} + scoped vercel previews ${CORS_PREVIEW_PATTERN}`);
   console.log(`Relayer: ${relayerKeypair.publicKey.toBase58()}`);
 });
