@@ -49,7 +49,7 @@ export interface ClaimProofResult {
   nullifierHash: Uint8Array;
   recipientField: Uint8Array;
   amountCommitment: Uint8Array;
-  passwordHash: Uint8Array;
+  passwordHash?: Uint8Array; // V1 only; removed from V2 public inputs in issue #20
   amount: bigint;
 }
 
@@ -114,7 +114,7 @@ export async function generateClaimProof(
   };
 }
 
-// V2 circuit artifacts (amount is private — 5 public inputs)
+// V2 circuit artifacts (amount is private — 4 public inputs)
 let WASM_V2_PATH = "/circuits/darkdrop.wasm"; // same WASM (circuit logic unchanged)
 let ZKEY_V2_PATH = "/circuits/darkdrop_v2_final.zkey";
 
@@ -125,19 +125,28 @@ export function setV2ArtifactPaths(wasmPath: string, zkeyPath: string): void {
 
 /**
  * Generate a Groth16 claim proof using V2 circuit (amount is PRIVATE).
- * Returns 5 public inputs (no amount).
+ * Returns 4 public inputs (no amount). The password_hash public input was
+ * removed in issue #20; the recipient is now bound injectively via the new
+ * recipient_hi/recipient_lo private inputs (recipient === Poseidon(hi, lo)).
  */
 export async function generateClaimProofV2(
   dropSecret: DropSecret,
   merkleProof: MerkleProof,
   recipient: PublicKey,
   nullifierHashVal: bigint,
-  amountCommitmentVal: bigint,
-  passwordHashVal: bigint
+  amountCommitmentVal: bigint
 ): Promise<ClaimProofResult> {
   const recipientField = pubkeyToField(recipient);
 
-  // Same circuit input structure — amount is still provided but is private
+  // Issue #20: the circuit binds recipient injectively as
+  // recipient === Poseidon(recipient_hi, recipient_lo), so the prover supplies
+  // the two 128-bit pubkey halves as private inputs (same split as V3 / on-chain
+  // pubkey_to_field). The public `recipient` value is unchanged.
+  const recipientBytes = recipient.toBytes();
+  const recipientHi = bytesToBigIntBE(recipientBytes.slice(0, 16));
+  const recipientLo = bytesToBigIntBE(recipientBytes.slice(16, 32));
+
+  // amount is still provided but is private. No password / password_hash (#20).
   const circuitInput = {
     secret: dropSecret.secret.toString(),
     amount: dropSecret.amount.toString(),
@@ -145,15 +154,15 @@ export async function generateClaimProofV2(
     nullifier: dropSecret.nullifier.toString(),
     merkle_path: merkleProof.pathElements.map((e) => e.toString()),
     merkle_indices: merkleProof.pathIndices.map((i) => i.toString()),
-    password: dropSecret.password.toString(),
+    recipient_hi: recipientHi.toString(),
+    recipient_lo: recipientLo.toString(),
     merkle_root: merkleProof.root.toString(),
     nullifier_hash: nullifierHashVal.toString(),
     recipient: recipientField.toString(),
     amount_commitment: amountCommitmentVal.toString(),
-    password_hash: passwordHashVal.toString(),
   };
 
-  // Generate proof with V2 zkey (5 public inputs, amount private)
+  // Generate proof with V2 zkey (4 public inputs, amount private)
   const { proof } = await snarkjs.groth16.fullProve(
     circuitInput,
     WASM_V2_PATH,
@@ -172,7 +181,6 @@ export async function generateClaimProofV2(
     nullifierHash: bigintToBytes32BE(nullifierHashVal),
     recipientField: bigintToBytes32BE(recipientField),
     amountCommitment: bigintToBytes32BE(amountCommitmentVal),
-    passwordHash: bigintToBytes32BE(passwordHashVal),
     amount: dropSecret.amount,
   };
 }

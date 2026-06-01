@@ -12,7 +12,7 @@ use crate::poseidon::{poseidon_hash, pubkey_to_field};
 /// The `inputs` parameter is an opaque byte vector containing:
 ///   [0..32]  merkle_root
 ///   [32..64] commitment (Poseidon(amount, blinding_factor))
-///   [64..96] seed (password_hash)
+/// (issue #20: the former [64..96] password_hash was removed — 96 -> 64 bytes.)
 ///
 /// No field is named "amount", "fee", or "lamports" in the IDL.
 pub fn handle_claim_credit(
@@ -22,12 +22,11 @@ pub fn handle_claim_credit(
     inputs: Vec<u8>,
     salt: [u8; 32],
 ) -> Result<()> {
-    // Parse opaque inputs
-    require!(inputs.len() == 96, DarkDropError::InvalidInputLength);
+    // Parse opaque inputs (issue #20: password_hash removed, 96 -> 64 bytes)
+    require!(inputs.len() == 64, DarkDropError::InvalidInputLength);
 
     let merkle_root: [u8; 32] = inputs[0..32].try_into().unwrap();
     let amount_commitment: [u8; 32] = inputs[32..64].try_into().unwrap();
-    let password_hash: [u8; 32] = inputs[64..96].try_into().unwrap();
 
     // Validate merkle root
     let tree = ctx.accounts.merkle_tree.load()?;
@@ -40,22 +39,21 @@ pub fn handle_claim_credit(
     // Compute recipient field element: Poseidon(pubkey_hi_128, pubkey_lo_128)
     let recipient_hash = pubkey_to_field(&ctx.accounts.recipient.key());
 
-    // Build public inputs — 5 elements, NO amount
+    // Build public inputs — 4 elements, NO amount
     // Order matches circuit signal declaration order:
     //   [0] merkle_root       (signal input merkle_root)
     //   [1] nullifier_hash    (signal input nullifier_hash)
     //   [2] recipient         (signal input recipient)
     //   [3] amount_commitment (signal input amount_commitment)
-    //   [4] password_hash     (signal input password_hash)
-    let public_inputs: [[u8; 32]; 5] = [
+    // (issue #20: the [4] password_hash input was removed — vacuous in-circuit gate.)
+    let public_inputs: [[u8; 32]; 4] = [
         merkle_root,
         nullifier_hash,
         recipient_hash,
         amount_commitment,
-        password_hash,
     ];
 
-    // Verify Groth16 proof (v2 circuit — 5 public inputs)
+    // Verify Groth16 proof (v2 circuit — 4 public inputs)
     verify_proof_v2(&proof, &public_inputs)?;
 
     // Initialize CreditNote PDA with re-randomized commitment.

@@ -23,7 +23,6 @@ import {
   poseidonHash,
   nullifierHash as computeNullifierHash,
   amountCommitment as computeAmountCommitment,
-  passwordHash as computePasswordHash,
   bigintToBytes32BE,
   bytes32BEToBigint,
 } from "@/lib/crypto";
@@ -238,25 +237,21 @@ export default function ClaimPage() {
     setStage("proving");
     const nullHash = computeNullifierHash(nullifier);
     const amtCommitment = computeAmountCommitment(amount, blindingFactor);
-    const pwdHash = computePasswordHash(pwdBigint);
-
     const v2Result = await generateClaimProofV2(
       { secret, nullifier, amount, blindingFactor, password: pwdBigint },
       merkleProofObj,
       publicKey,
       nullHash,
-      amtCommitment,
-      pwdHash
+      amtCommitment
     );
 
     const nullifierHashBytes = bigintToBytes32BE(nullHash);
     const onChainRoot = bigintToBytes32BE(merkleProofObj.root);
 
-    // 96-byte opaque inputs: merkle_root || amount_commitment || password_hash
-    const inputs = new Uint8Array(96);
+    // 64-byte opaque inputs: merkle_root || amount_commitment (password_hash removed, #20)
+    const inputs = new Uint8Array(64);
     inputs.set(onChainRoot, 0);
     inputs.set(v2Result.amountCommitment, 32);
-    inputs.set(v2Result.passwordHash, 64);
 
     // Random salt, reduced mod Fr — Poseidon panics on out-of-range field
     // elements, matching the SOL path's salt construction.
@@ -406,7 +401,6 @@ export default function ClaimPage() {
                 .join("")
           )
         : 0n;
-      const pwdHash = computePasswordHash(pwdBigint);
 
       // Step 2: Build the Merkle proof. Prefer the snapshot embedded in the
       // claim code — zero RPC calls. Fall back to event-log replay only for
@@ -491,14 +485,12 @@ export default function ClaimPage() {
           { pathElements, pathIndices, root: merkleRootBigInt },
           publicKey!,
           nullHash,
-          amtCommitment,
-          pwdHash
+          amtCommitment
         );
         nullifierHashBytes = bigintToBytes32BE(nullHash);
-        opaqueInputs = new Uint8Array(96);
+        opaqueInputs = new Uint8Array(64);
         opaqueInputs.set(onChainRoot, 0);
         opaqueInputs.set(v2ProofResult.amountCommitment, 32);
-        opaqueInputs.set(v2ProofResult.passwordHash, 64);
         // Random salt mod Fr — Poseidon panics on out-of-range inputs
         const BN254_FR = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
         const saltRaw = crypto.getRandomValues(new Uint8Array(32));
