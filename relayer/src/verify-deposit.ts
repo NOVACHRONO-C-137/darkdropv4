@@ -3,16 +3,22 @@
  *
  * A relayed deposit must be a transaction that the depositor PURPOSE-BUILT for
  * this exact deposit — not merely any tx that happened to credit the relayer.
- * We verify, against the parsed on-chain tx, that it contains EXACTLY:
+ * We verify, against the parsed on-chain tx, that it contains:
  *
- *   1. one SPL Memo instruction (pinned program id) whose content == `nonce`
- *   2. one System `transfer` instruction with accounts exactly
+ *   1. EXACTLY one SPL Memo instruction (pinned program id) whose content == `nonce`
+ *   2. EXACTLY one System `transfer` instruction with accounts exactly
  *      [source = declared `payer`, destination = relayer] for `lamports == amount`
+ *   3. ZERO OR MORE ComputeBudget instructions (priority-fee / CU-limit), which
+ *      real wallets (e.g. Phantom) inject. They move no funds and touch no
+ *      accounts — the fee is paid by the tx fee-payer (the depositor) — so they
+ *      are benign and tolerated. (This previously required EXACTLY 2 instructions,
+ *      which intermittently rejected legit deposits when a wallet injected a
+ *      ComputeBudget ix — see issue #38.)
  *
- * …and NOTHING else. Extra/decoy instructions, address-table lookups, a failed
- * tx, a wrong destination, a >= (vs ==) amount, or a missing/mismatched memo all
- * cause rejection. The single-use `nonce` (committed in the memo) is what binds
- * the funded transfer to one specific deposit and powers the no-TTL replay guard
+ * Any OTHER program, a second transfer/memo, address-table lookups, a failed tx,
+ * a wrong source/destination, a >= (vs ==) amount, or a missing/mismatched memo
+ * all cause rejection. The single-use `nonce` (committed in the memo) binds the
+ * funded transfer to one specific deposit and powers the no-TTL replay guard
  * (see processed-txs.ts).
  */
 
@@ -21,6 +27,11 @@ import { Connection } from "@solana/web3.js";
 const SYSTEM_PROGRAM_ID = "11111111111111111111111111111111";
 // Pinned SPL Memo program (v2). The memo MUST come from exactly this program.
 const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+// ComputeBudget program. Its instructions (SetComputeUnitLimit / SetComputeUnitPrice
+// / etc.) set the tx's compute limit and priority fee — paid by the tx fee-payer
+// (the depositor), moving no funds and touching no accounts. Real wallets inject
+// these, so they are tolerated alongside the transfer + memo (issue #38).
+const COMPUTE_BUDGET_PROGRAM_ID = "ComputeBudget111111111111111111111111111111";
 
 export interface DepositBinding {
   payer: string; // declared source pubkey (base58)
@@ -60,14 +71,9 @@ export async function verifyDepositTx(
   }
 
   const ixs = tx.transaction.message.instructions as any[];
-  // STRICT shape: exactly the memo + the transfer, nothing else. Any extra
-  // instruction (decoy transfer, compute budget, etc.) is rejected.
-  if (ixs.length !== 2) {
-    return {
-      ok: false,
-      error: `Deposit TX must contain exactly 2 instructions (System transfer + memo), found ${ixs.length}`,
-    };
-  }
+  // STRICT shape: exactly one transfer + exactly one memo, plus any number of
+  // benign ComputeBudget ixs (wallet priority-fee injection). Every other
+  // program — and a second transfer or a second memo — is rejected below.
 
   let sawTransfer = false;
   let sawMemo = false;
@@ -109,6 +115,10 @@ export async function verifyDepositTx(
         return { ok: false, error: "Memo does not equal the declared nonce" };
       }
       sawMemo = true;
+    } else if (programId === COMPUTE_BUDGET_PROGRAM_ID) {
+      // Benign: sets CU limit / priority fee (paid by the depositor fee-payer),
+      // moves no funds, touches no accounts. Tolerated in any number (issue #38).
+      continue;
     } else {
       return { ok: false, error: `Unexpected instruction program ${programId} in deposit TX` };
     }
